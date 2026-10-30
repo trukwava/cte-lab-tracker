@@ -25,6 +25,17 @@ python -m pip install -r requirements.txt
 
 Change the local port with `PORT=4300 npm start`. **This build deliberately refuses non-loopback `HOST` bindings** (`0.0.0.0`, LAN IPs and public interfaces) because anyone able to reach the demo role selector could assume instructor privileges. It also validates request Host/Origin, requires JSON for POSTs and disallows cross-site browser mutations. QR codes generated locally are intended for the same local host; cross-device or public QR flows require replacing demo authentication and reworking network access. Do not expose this app through a tunnel, reverse proxy or public hostname.
 
+## Optional local pilot sign-in (experimental)
+
+The default role-picker is intentionally a synthetic demo, **not real authentication**. An opt-in `AUTH_MODE=pilot` path now accepts locally provisioned username/password accounts, persists hashed sessions in a separate SQLite file, and disables the demo role-picker and reset endpoints. It **still runs only on localhost**, using the same fictional lab fixtures. It is not a publicly hostable or multi-tenant system.
+
+```bash
+AUTH_MODE=pilot node --experimental-strip-types src/account-cli.ts create teacher instructor
+AUTH_MODE=pilot npm start
+```
+
+The first command prints a generated one-time credential; treat it as a secret. Read [Local pilot authentication](docs/LOCAL_PILOT_AUTH.md) for rotation, revocation, tests, and deployment boundaries. In both modes, do **not** publish the app behind a tunnel or proxy or add real student/staff records.
+
 ## Operator workflow
 
 1. **Today:** see overdue loans, due maintenance dates, missing and quarantined equipment. These are work queues, not inferred risk scores.
