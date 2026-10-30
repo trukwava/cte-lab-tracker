@@ -1,0 +1,86 @@
+
+> riverton-cte-lab-tracker@0.1.0 test
+> node --test --experimental-strip-types tests/*.test.mjs
+
+TAP version 13
+# (node:1732) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: fixtures contain requested cardinalities and edge cases
+ok 1 - fixtures contain requested cardinalities and edge cases
+  ---
+  duration_ms: 243.960979
+  type: 'test'
+  ...
+# Subtest: signed-out QR and API cannot disclose borrower details
+ok 2 - signed-out QR and API cannot disclose borrower details
+  ---
+  duration_ms: 804.890183
+  type: 'test'
+  ...
+# Subtest: simultaneous checkout attempts create exactly one active loan
+ok 3 - simultaneous checkout attempts create exactly one active loan
+  ---
+  duration_ms: 17.088827
+  type: 'test'
+  ...
+# Subtest: damaged saw return blocks reissue, preserves defect through service and requires instructor note
+ok 4 - damaged saw return blocks reissue, preserves defect through service and requires instructor note
+  ---
+  duration_ms: 20.048718
+  type: 'test'
+  ...
+# Subtest: missing, quarantined and in-service statuses block issuance
+ok 5 - missing, quarantined and in-service statuses block issuance
+  ---
+  duration_ms: 13.58745
+  type: 'test'
+  ...
+# Subtest: date-only maintenance due persists until logged service; policy history retained
+ok 6 - date-only maintenance due persists until logged service; policy history retained
+  ---
+  duration_ms: 16.897421
+  type: 'test'
+  ...
+# Subtest: import corrects invalid rows without duplicating accepted assets
+ok 7 - import corrects invalid rows without duplicating accepted assets
+  ---
+  duration_ms: 17.010466
+  type: 'test'
+  ...
+# Subtest: purchase request is saved only as draft; actor and values survive reload
+ok 8 - purchase request is saved only as draft; actor and values survive reload
+  ---
+  duration_ms: 8.25741
+  type: 'test'
+  ...
+# Subtest: server-side role authorization prevents unapproved release or purchasing
+ok 9 - server-side role authorization prevents unapproved release or purchasing
+  ---
+  duration_ms: 8.785264
+  type: 'test'
+  ...
+# Subtest: asset edit retains tag, curated vendor and condition attribution; defect blocks issue
+ok 10 - asset edit retains tag, curated vendor and condition attribution; defect blocks issue
+  ---
+  duration_ms: 11.544056
+  type: 'test'
+  ...
+# Subtest: import stores both original and normalized source values for reconciliation
+ok 11 - import stores both original and normalized source values for reconciliation
+  ---
+  duration_ms: 9.630422
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1266.322299
+
+> riverton-cte-lab-tracker@0.1.0 check:client
+> tsc --noEmit -p tsconfig.json
+

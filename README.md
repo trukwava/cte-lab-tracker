@@ -1,5 +1,3 @@
-> **Publication status:** The repository is being initialized. The complete application source is packaged separately and has not yet been uploaded to this repository. Do not assume these instructions can run from this checkout until the source upload is complete.
-
 # Riverton CTE Lab Tracker
 
 **Demo v0.1 · 29 October 2026 · local-first working implementation**
