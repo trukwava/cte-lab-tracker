@@ -9,7 +9,10 @@
     "dev": "node --watch --experimental-strip-types src/server.ts",
     "test": "node --test --experimental-strip-types tests/*.test.mjs",
     "build:client": "tsc -p tsconfig.json && cp build/client.js web/client.js",
-    "check:client": "tsc --noEmit -p tsconfig.json"
+    "check:client": "tsc --noEmit -p tsconfig.json",
+    "db": "node --experimental-strip-types src/backup-cli.ts"
   },
-  "engines": {"node": ">=22.13"}
+  "engines": {
+    "node": ">=22.13"
+  }
 }

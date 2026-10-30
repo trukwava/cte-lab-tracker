@@ -36,3 +36,12 @@
 - Added a second fictional lab only inside an isolated adversarial test database, with extra records and attempted cross-lab references.
 - Local regression result: `npm test` **24 passed, 0 failed**; `npm run check:client` unchanged. GitHub CI outcome must be checked separately.
 - Limitation: this remains a **single-lab application** with a hardcoded `riverton` principal, not general multi-organization authorization. Hosted DB/TLS/identity/backups remain blocked.
+
+
+## 30 October 2026 — local recovery tools
+
+- Added a Node built-in online SQLite snapshot CLI; verifies backup integrity and a SHA-256 digest without copying a live database file around its WAL journal.
+- Added create-only restore to a new database location, with saved login sessions revoked and historical audit records preserved.
+- Added a recovery runbook and automated restoration test (including backup while a separate writer connection remains open).
+- Local regression result: **25/25 tests passing** with TypeScript client check passing. GitHub CI to be confirmed on the pull request.
+- Not implemented: scheduled/offsite backups, cryptographic encryption at rest, PostgreSQL recovery, recovery-time targets, or restoration to active production systems.
