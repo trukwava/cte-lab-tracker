@@ -33,6 +33,65 @@ CREATE TABLE IF NOT EXISTS local_accounts (id TEXT PRIMARY KEY,lab_id TEXT NOT N
 CREATE TABLE IF NOT EXISTS local_sessions (token_hash TEXT PRIMARY KEY,account_id TEXT NOT NULL REFERENCES local_accounts(id) ON DELETE CASCADE,expires_at INTEGER NOT NULL,created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS local_sessions_expiry ON local_sessions(expires_at);
 
+
+-- Protect tenant ownership even for direct DB writes, independent of HTTP validation.
+CREATE TRIGGER IF NOT EXISTS asset_location_lab_insert BEFORE INSERT ON assets
+WHEN (NEW.home_location_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM locations l WHERE l.id=NEW.home_location_id AND l.lab_id=NEW.lab_id))
+  OR (NEW.current_location_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM locations l WHERE l.id=NEW.current_location_id AND l.lab_id=NEW.lab_id))
+BEGIN SELECT RAISE(ABORT,'Cross-lab asset location'); END;
+CREATE TRIGGER IF NOT EXISTS asset_location_lab_update BEFORE UPDATE OF lab_id,home_location_id,current_location_id ON assets
+WHEN (NEW.home_location_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM locations l WHERE l.id=NEW.home_location_id AND l.lab_id=NEW.lab_id))
+  OR (NEW.current_location_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM locations l WHERE l.id=NEW.current_location_id AND l.lab_id=NEW.lab_id))
+BEGIN SELECT RAISE(ABORT,'Cross-lab asset location'); END;
+CREATE TRIGGER IF NOT EXISTS loan_borrower_lab_insert BEFORE INSERT ON loans
+WHEN NOT EXISTS(SELECT 1 FROM assets a JOIN borrower_refs b ON a.lab_id=b.lab_id WHERE a.id=NEW.asset_id AND b.code=NEW.borrower_code)
+BEGIN SELECT RAISE(ABORT,'Cross-lab borrower loan'); END;
+CREATE TRIGGER IF NOT EXISTS loan_borrower_lab_update BEFORE UPDATE OF asset_id,borrower_code ON loans
+WHEN NOT EXISTS(SELECT 1 FROM assets a JOIN borrower_refs b ON a.lab_id=b.lab_id WHERE a.id=NEW.asset_id AND b.code=NEW.borrower_code)
+BEGIN SELECT RAISE(ABORT,'Cross-lab borrower loan'); END;
+CREATE TRIGGER IF NOT EXISTS vendor_asset_lab_insert BEFORE INSERT ON asset_vendor_refs
+WHEN NOT EXISTS(SELECT 1 FROM assets a JOIN vendor_refs v ON a.lab_id=v.lab_id WHERE a.id=NEW.asset_id AND v.id=NEW.vendor_id)
+BEGIN SELECT RAISE(ABORT,'Cross-lab vendor association'); END;
+CREATE TRIGGER IF NOT EXISTS vendor_asset_lab_update BEFORE UPDATE OF asset_id,vendor_id ON asset_vendor_refs
+WHEN NOT EXISTS(SELECT 1 FROM assets a JOIN vendor_refs v ON a.lab_id=v.lab_id WHERE a.id=NEW.asset_id AND v.id=NEW.vendor_id)
+BEGIN SELECT RAISE(ABORT,'Cross-lab vendor association'); END;
+CREATE TRIGGER IF NOT EXISTS purchase_refs_lab_insert BEFORE INSERT ON purchase_requests
+WHEN (NEW.asset_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM assets a WHERE a.id=NEW.asset_id AND a.lab_id=NEW.lab_id))
+  OR (NEW.vendor_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM vendor_refs v WHERE v.id=NEW.vendor_id AND v.lab_id=NEW.lab_id))
+BEGIN SELECT RAISE(ABORT,'Cross-lab purchase reference'); END;
+CREATE TRIGGER IF NOT EXISTS purchase_refs_lab_update BEFORE UPDATE OF lab_id,asset_id,vendor_id ON purchase_requests
+WHEN (NEW.asset_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM assets a WHERE a.id=NEW.asset_id AND a.lab_id=NEW.lab_id))
+  OR (NEW.vendor_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM vendor_refs v WHERE v.id=NEW.vendor_id AND v.lab_id=NEW.lab_id))
+BEGIN SELECT RAISE(ABORT,'Cross-lab purchase reference'); END;
+CREATE TRIGGER IF NOT EXISTS plan_asset_lab_insert BEFORE INSERT ON maintenance_plan_versions
+WHEN NOT EXISTS(SELECT 1 FROM assets a WHERE a.id=NEW.asset_id)
+BEGIN SELECT RAISE(ABORT,'Unknown plan asset'); END;
+CREATE TRIGGER IF NOT EXISTS import_batch_asset_lab_insert BEFORE INSERT ON import_rows
+WHEN NOT EXISTS(SELECT 1 FROM import_batches b JOIN assets a ON a.lab_id=b.lab_id WHERE b.id=NEW.batch_id AND a.id=NEW.asset_id)
+BEGIN SELECT RAISE(ABORT,'Cross-lab import row'); END;
+CREATE TRIGGER IF NOT EXISTS import_batch_asset_lab_update BEFORE UPDATE OF batch_id,asset_id ON import_rows
+WHEN NOT EXISTS(SELECT 1 FROM import_batches b JOIN assets a ON a.lab_id=b.lab_id WHERE b.id=NEW.batch_id AND a.id=NEW.asset_id)
+BEGIN SELECT RAISE(ABORT,'Cross-lab import row'); END;
+
+-- A maintenance event must refer to a policy version belonging to the same asset.
+CREATE TRIGGER IF NOT EXISTS service_plan_asset_insert BEFORE INSERT ON service_events
+WHEN NOT EXISTS(SELECT 1 FROM maintenance_plan_versions p WHERE p.id=NEW.plan_version_id AND p.asset_id=NEW.asset_id)
+BEGIN SELECT RAISE(ABORT,'Service plan does not belong to asset'); END;
+CREATE TRIGGER IF NOT EXISTS service_plan_asset_update BEFORE UPDATE OF asset_id,plan_version_id ON service_events
+WHEN NOT EXISTS(SELECT 1 FROM maintenance_plan_versions p WHERE p.id=NEW.plan_version_id AND p.asset_id=NEW.asset_id)
+BEGIN SELECT RAISE(ABORT,'Service plan does not belong to asset'); END;
+CREATE TRIGGER IF NOT EXISTS asset_current_plan_update BEFORE UPDATE OF current_plan_id ON assets
+WHEN NEW.current_plan_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM maintenance_plan_versions p WHERE p.id=NEW.current_plan_id AND p.asset_id=NEW.id)
+BEGIN SELECT RAISE(ABORT,'Current plan does not belong to asset'); END;
+CREATE TRIGGER IF NOT EXISTS asset_lab_immutable BEFORE UPDATE OF lab_id ON assets
+WHEN NEW.lab_id<>OLD.lab_id BEGIN SELECT RAISE(ABORT,'Asset lab assignment is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS borrower_lab_immutable BEFORE UPDATE OF lab_id ON borrower_refs
+WHEN NEW.lab_id<>OLD.lab_id BEGIN SELECT RAISE(ABORT,'Borrower lab assignment is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS location_lab_immutable BEFORE UPDATE OF lab_id ON locations
+WHEN NEW.lab_id<>OLD.lab_id BEGIN SELECT RAISE(ABORT,'Location lab assignment is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS vendor_lab_immutable BEFORE UPDATE OF lab_id ON vendor_refs
+WHEN NEW.lab_id<>OLD.lab_id BEGIN SELECT RAISE(ABORT,'Vendor lab assignment is immutable'); END;
+
 `);
  // Additive schema upgrades preserve existing SQLite demo records.
  for(const [table,col,definition] of [['import_batches','raw_csv',"TEXT NOT NULL DEFAULT ''"],['import_rows','original_json','TEXT'],['import_rows','normalized_json','TEXT']]){
@@ -42,8 +101,10 @@ CREATE INDEX IF NOT EXISTS local_sessions_expiry ON local_sessions(expires_at);
 }
 export function transaction<T>(db:DB,fn:()=>T):T{db.exec('BEGIN IMMEDIATE');try{const result=fn();db.exec('COMMIT');return result;}catch(e){db.exec('ROLLBACK');throw e;}}
 export function audit(db:DB,entity:string,id:string,action:string,actor:string,details:unknown={}){db.prepare('INSERT INTO audit_events(lab_id,entity,entity_id,action,actor,details_json,created_at) VALUES (?,?,?,?,?,?,?)').run('riverton',entity,id,action,actor,JSON.stringify(details),isoNow())}
-export function isSeeded(db:DB){return Number(db.prepare('SELECT COUNT(*) n FROM assets').get().n)>0}
+export function isSeeded(db:DB){return Number(db.prepare("SELECT COUNT(*) n FROM assets WHERE lab_id='riverton'").get().n)>0}
 export function seed(db:DB) {transaction(db,()=>{
+  // Demo resets must never wipe records from another lab in a shared DB.
+  if(db.prepare("SELECT 1 FROM labs WHERE id <> 'riverton' LIMIT 1").get())throw Error('Refusing to seed: database contains another lab');
   for(const table of ['import_rows','import_batches','audit_events','approvals','purchase_requests','service_events','quarantines','condition_events','loans','maintenance_plan_versions','asset_tags','asset_vendor_refs','assets','vendor_refs','borrower_refs','locations','labs'])db.exec('DELETE FROM '+table);
   db.prepare('INSERT INTO labs(id,name,demo) VALUES (?,?,1)').run('riverton','Riverton Technical School · Carpentry Lab');
   const locs=['Tool Crib','Workbench A','Workbench B','Machine Bay','Inspection Shelf'];
