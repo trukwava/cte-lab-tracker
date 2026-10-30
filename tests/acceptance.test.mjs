@@ -111,3 +111,49 @@ test('import stores both original and normalized source values for reconciliatio
  const conn=new DatabaseSync(file,{readOnly:true});const v=conn.prepare('SELECT original_json,normalized_json FROM import_rows WHERE batch_id=?').get(preview.result.batch_id);conn.close();
  assert.equal(JSON.parse(v.original_json).make_model,'Angle gauge');assert.equal(JSON.parse(v.normalized_json).tag,'AST-NEW-55');
 });
+
+
+test('demo rejects DNS rebinding, cross-origin mutation and unsafe content types',async()=>{
+ await reset();
+ const http=await import('node:http');
+ const hostileStatus=await new Promise((resolve,reject)=>{
+   const request=http.request({hostname:'127.0.0.1',port,path:'/api/session',headers:{Host:'malicious.example:'+port}},response=>{response.resume();resolve(response.statusCode)});
+   request.on('error',reject);request.end();
+ });
+ assert.equal(hostileStatus,403);
+ const hostileOrigin=await fetch(base+'/api/demo/reset',{method:'POST',headers:{Cookie:teacher,Origin:'https://untrusted.example','Content-Type':'application/json'},body:'{}'});
+ assert.equal(hostileOrigin.status,403);
+ const hostileFetchSite=await fetch(base+'/api/demo/reset',{method:'POST',headers:{Cookie:teacher,'Sec-Fetch-Site':'cross-site','Content-Type':'application/json'},body:'{}'});
+ assert.equal(hostileFetchSite.status,403);
+ const badType=await fetch(base+'/api/demo/reset',{method:'POST',headers:{Cookie:teacher,'Content-Type':'text/plain'},body:'{}'});
+ assert.equal(badType.status,415);
+ const valid=await fetch(base+'/api/session',{headers:{Origin:base}});
+ assert.equal(valid.status,200);
+ assert.match(valid.headers.get('content-security-policy')||'',/frame-ancestors 'none'/);
+ assert.equal(valid.headers.get('x-frame-options'),'DENY');
+ assert.equal(valid.headers.get('cache-control'),'no-store');
+});
+
+test('large JSON requests return 413 without killing the server',async()=>{
+ const response=await fetch(base+'/api/demo/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role:'viewer',padding:'x'.repeat(310000)})});
+ assert.equal(response.status,413);
+ assert.equal((await req('/api/session')).status,200);
+});
+
+test('import commit cannot invent additional source rows',async()=>{
+ await reset();
+ const preview=await post('/api/import/preview',{csv:'tag,category,make_model,serial_ref,home_location_id\nAST-IMPORT-1,Hand Tools,Mallet,abc,LOC-1\n'});
+ assert.equal(preview.status,200);
+ const invalid=await post('/api/import/commit',{batch_id:preview.result.batch_id,rows:[{row_number:999,values:{tag:'AST-FAKE-1',category:'Hand Tools',make_model:'Fake',serial_ref:'x',home_location_id:'LOC-1'}}]});
+ assert.equal(invalid.status,400);
+ assert.equal((await req('/api/assets',{auth:teacher})).result.length,60);
+});
+
+test('rejects network binding before opening database',async()=>{
+ const {spawnSync}=await import('node:child_process');
+ const unsafeFile=join(tmp,'unsafe-exposure.sqlite');
+ const child=spawnSync(process.execPath,['--no-warnings','--experimental-strip-types',join(root,'src/server.ts')],{cwd:root,env:{...process.env,HOST:'0.0.0.0',DB_FILE:unsafeFile},encoding:'utf8',timeout:5000});
+ assert.notEqual(child.status,0);
+ assert.match(child.stderr,/Unsafe demo exposure refused/);
+ const {existsSync}=await import('node:fs');assert.equal(existsSync(unsafeFile),false);
+});
