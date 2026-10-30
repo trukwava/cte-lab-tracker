@@ -47,7 +47,7 @@ The first command prints a generated one-time credential; treat it as a secret. 
 7. **Requests:** save a replacement/purchasing draft with quantity, reason, curated vendor reference and optional supplied estimate. Export CSV. There is no vendor integration, authorization-to-spend, or order placement.
 8. **Import:** paste/upload CSV, preview rejected rows, correct them and commit valid rows. Repeating the same batch/row does not duplicate accepted assets. Original parsed source fields and normalized accepted fields are stored separately.
 9. **QR labels:** the library generates a print sheet of up to 24 labels at once (use the browser Print command). QR contains a non-sensitive asset URL; the asset API requires a session before disclosing borrower information. A print sheet does not include borrowers or service notes.
-10. **Audit:** inspect actor-attributed changes. Instructors can use **Reset synthetic demo records** in the sidebar, which resets the one demo lab only. It destroys demo changes, not other organizations' records.
+10. **Audit:** inspect actor-attributed changes. Instructors can use **Reset synthetic demo records** in the sidebar. Reset is refused if the same database contains another lab; the demo must never silently delete other organizations' records.
 
 The **Refresh** button is available on each screen; the UI reports the last fetched snapshot time. When another staff member has already issued an item, a stale screen receives an HTTP 409 with the current conflict rather than succeeding.
 
@@ -58,7 +58,7 @@ npm test
 npm run check:client    # requires TypeScript compiler
 ```
 
-Eleven automated tests passed on 29 October 2026, covering: fixture dimensions; signed-out borrower privacy and QR HTML; two simultaneous checkout requests plus independent database-constraint verification; damaged return and instructor release; blocked states; maintenance schedule and policy-history preservation; corrected/idempotent import; draft procurement persistence/export; role authorization; vendor/metadata editing; and original/normalized import provenance.
+The initial eleven automated tests passed on 29 October 2026, covering: fixture dimensions; signed-out borrower privacy and QR HTML; two simultaneous checkout requests plus independent database-constraint verification; damaged return and instructor release; blocked states; maintenance schedule and policy-history preservation; corrected/idempotent import; draft procurement persistence/export; role authorization; vendor/metadata editing; and original/normalized import provenance.
 
 The HTTP server was started and verified against live API requests. **Browser visual testing was attempted but blocked by the execution environment's browser administrator policy** (`ERR_BLOCKED_BY_ADMINISTRATOR` for localhost). Desktop/mobile screens are implemented and TypeScript-checked, but interactive rendering and print layout have not been independently browser-certified. See `docs/IMPLEMENTATION_STATUS.md`.
 
@@ -74,6 +74,8 @@ web/client.ts            TypeScript UI source and action wiring
 web/client.js            precompiled browser code (no runtime npm dependencies)
 web/styles.css           responsive instructor-focused interface
 tests/acceptance.test.mjs automated HTTP + SQLite acceptance tests
+tests/pilot-auth.test.mjs local pilot identity/session checks
+tests/lab-boundary.test.mjs cross-lab isolation and destructive-reset checks
 fixtures/                CSV input and correction examples
 docs/                    product brief, pilot, status and test evidence
 ```
@@ -86,11 +88,11 @@ docs/                    product brief, pilot, status and test evidence
 - **Policies:** date-only due dates use UTC `YYYY-MM-DD`; exact loan due times use ISO UTC instants, displayed using the browser's named local timezone. Every service event retains the maintenance-plan-version ID and a snapshot of its computed next due date.
 - **Purchasing:** cents are stored as integers, and estimates stay null if not supplied. Vendor references have a catalog reference and last-checked date; these do not imply stock, pricing accuracy, approved procurement or purchasing authority.
 - **Imports:** a 300-row / 200 KB request ceiling, RFC4180-compatible quoting, duplicate tag validation, shared-serial warning (not an automatic merge), source/normalized provenance, per-batch row idempotency.
-- **Data separation:** a single explicitly marked demo lab (`riverton`). The only reset operation reseeds its synthetic tables. Other organizations are not modeled. Production requires tenant-scoped identity, stronger authorization, migrations/backups, rate limits, accessibility testing and security review. See `docs/DEPLOYMENT_GATES.md` for the explicit release checklist.
+- **Data separation:** a single explicitly marked demo lab (`riverton`). The local demo is explicitly restricted to the fictional `riverton` lab. Read routes and exports are lab-filtered; relational triggers reject cross-lab asset locations, borrower loans, vendor links, import rows, and purchase references. Demo reset refuses to run against a database containing another lab. This is defensive isolation groundwork, **not** support for creating/serving multiple organizations. Production requires tenant-scoped identity, stronger authorization, migrations/backups, rate limits, accessibility testing and security review. See `docs/DEPLOYMENT_GATES.md` for the explicit release checklist.
 
 ## Limits and retention
 
-Operational metadata and audit records persist **indefinitely in the local SQLite file** until reset or manual deletion. The reset action clears *all* fictional transactions and re-seeds, including audit history; the demo does not offer retention controls or individual deletion. Delete `data/riverton-demo.sqlite` (and its SQLite `-wal`/`-shm` companions when the server is stopped) to start fresh. Back up that file separately if preserving demo edits. The zip does not include an existing mutable database; it seeds a fresh one.
+Operational metadata and audit records persist **indefinitely in the local SQLite file** until reset or manual deletion. The reset action clears *all* fictional Riverton transactions and re-seeds, including audit history, but refuses to run in a database that contains another lab; the demo does not offer retention controls or individual deletion. Delete `data/riverton-demo.sqlite` (and its SQLite `-wal`/`-shm` companions when the server is stopped) to start fresh. Back up that file separately if preserving demo edits. The zip does not include an existing mutable database; it seeds a fresh one.
 
 Not implemented: real identity provider, tenant isolation, student personal-data processing, automatic safety judgments, service-photo binary storage (only textual photo/service references), equipment sensing, comprehensive bulk consumables, vendor purchasing integrations, purchasing approvals, background processing, production deployment, district-wide reporting, or compliance certification. Optional AI is omitted: all P0 deterministic workflows operate without a model provider.
 
