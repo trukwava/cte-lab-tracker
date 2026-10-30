@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS approvals (id INTEGER PRIMARY KEY AUTOINCREMENT,lab_i
 CREATE TABLE IF NOT EXISTS audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT,lab_id TEXT NOT NULL REFERENCES labs(id),entity TEXT NOT NULL,entity_id TEXT NOT NULL,action TEXT NOT NULL,actor TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS import_batches (id TEXT PRIMARY KEY,lab_id TEXT NOT NULL REFERENCES labs(id),created_by TEXT NOT NULL,created_at TEXT NOT NULL,raw_csv TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS import_rows (batch_id TEXT NOT NULL REFERENCES import_batches(id),row_number INTEGER NOT NULL,asset_id TEXT NOT NULL REFERENCES assets(id),original_json TEXT,normalized_json TEXT,PRIMARY KEY(batch_id,row_number));
+-- Local pilot identities deliberately bound to the single fictional Riverton lab.
+CREATE TABLE IF NOT EXISTS local_accounts (id TEXT PRIMARY KEY,lab_id TEXT NOT NULL REFERENCES labs(id),username TEXT NOT NULL UNIQUE COLLATE NOCASE,role TEXT NOT NULL CHECK(role IN ('instructor','staff','viewer')),salt TEXT NOT NULL,password_hash TEXT NOT NULL,disabled INTEGER NOT NULL DEFAULT 0 CHECK(disabled IN (0,1)),created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS local_sessions (token_hash TEXT PRIMARY KEY,account_id TEXT NOT NULL REFERENCES local_accounts(id) ON DELETE CASCADE,expires_at INTEGER NOT NULL,created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS local_sessions_expiry ON local_sessions(expires_at);
+
 `);
  // Additive schema upgrades preserve existing SQLite demo records.
  for(const [table,col,definition] of [['import_batches','raw_csv',"TEXT NOT NULL DEFAULT ''"],['import_rows','original_json','TEXT'],['import_rows','normalized_json','TEXT']]){

@@ -17,3 +17,12 @@
 **Run evidence:** A local server successfully responded to `/api/session`, rejected `/api/assets/AST-001` with HTTP 401 while signed out, accepted an instructor demo session, reported the seeded fixture counts and generated printable QR HTML. These checks establish API behavior only, not visual workflow certification.
 
 **Next release gate:** Do not add a public URL while self-selected roles remain in place. The hosted pilot requires real identity, scoped authorization, a hosted persistent database, backup/recovery, abuse protection, and an end-to-end browser/security review (`docs/DEPLOYMENT_GATES.md`).
+
+
+## 30 October 2026 — local pilot authentication experiment
+
+- Added separately configured `AUTH_MODE=pilot` and a CLI that issues random local credentials for instructor/staff/viewer roles.
+- Added scrypt password hashes, hashed persistent session tokens, account disabling/rotation, strict cookie flags, and local failed-login throttle.
+- Disabled demo role selection and fixture reset in pilot mode; kept loopback-only deployment guard and a separate synthetic database.
+- Explicitly **not** shipped: public hosting, TLS, organization-scoped authorization, real institutional data, managed identity, durable cloud storage, or a production security review.
+- Added automated pilot authentication/revocation/restart tests. Live CI status to be confirmed on GitHub, not inferred from local runs.
