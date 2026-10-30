@@ -26,3 +26,13 @@
 - Disabled demo role selection and fixture reset in pilot mode; kept loopback-only deployment guard and a separate synthetic database.
 - Explicitly **not** shipped: public hosting, TLS, organization-scoped authorization, real institutional data, managed identity, durable cloud storage, or a production security review.
 - Added automated pilot authentication/revocation/restart tests. Live CI status to be confirmed on GitHub, not inferred from local runs.
+
+
+## 30 October 2026 — single-lab isolation hardening
+
+- Added lab predicates to loan and service-history list endpoints and the Today overdue queue; foreign-lab records cannot bleed into the Riverton dashboards, exports or asset detail pages.
+- Added persistent SQLite triggers for cross-lab asset location updates, borrower loans, vendor associations, purchase references and import accepted rows, including direct database writes outside the HTTP layer.
+- Demo reset and seed now fail closed if any other lab exists in the same database; changes in a foreign lab cannot be erased by a synthetic reset.
+- Added a second fictional lab only inside an isolated adversarial test database, with extra records and attempted cross-lab references.
+- Local regression result: `npm test` **24 passed, 0 failed**; `npm run check:client` unchanged. GitHub CI outcome must be checked separately.
+- Limitation: this remains a **single-lab application** with a hardcoded `riverton` principal, not general multi-organization authorization. Hosted DB/TLS/identity/backups remain blocked.
