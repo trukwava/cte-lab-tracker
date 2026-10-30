@@ -223,7 +223,7 @@ async function boot() { try {
         showAsset(queryAsset);
 }
 catch (e) {
-    app.innerHTML = `<div class="fatal"><h2>Unable to open the lab</h2><p>${esc(e.message)}</p><button onclick="location.reload()">Retry connection</button></div>`;
+    app.innerHTML = `<div class="fatal"><h2>Unable to open the lab</h2><p>${esc(e.message)}</p><button data-action="reload">Retry connection</button></div>`;
 } }
 app.addEventListener('click', async (e) => {
     const target = e.target.closest('[data-action],[data-view],[data-asset],[data-login]');
@@ -250,6 +250,10 @@ app.addEventListener('click', async (e) => {
         return;
     }
     const action = target.dataset.action || '', id = target.dataset.id || '';
+    if (action === 'reload') {
+        location.reload();
+        return;
+    }
     if (action === 'reset-demo') {
         if (!window.confirm('Reset the entire fictional Riverton demo to its original 60 assets? This permanently removes DEMO edits.'))
             return;

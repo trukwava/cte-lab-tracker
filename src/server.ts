@@ -8,9 +8,14 @@ import { openDatabase, seed, isSeeded, transaction, audit, type DB } from './db.
 import { CATEGORIES, CONDITIONS, BLOCKED, dateAfter, dateOnly, datePlus, isoNow, isIso, validateDate, safeText, parseCsv, csv } from './domain.ts';
 
 const ROOT=dirname(dirname(fileURLToPath(import.meta.url)));
+const PORT=Number(process.env.PORT||4173),HOST=process.env.HOST||'127.0.0.1';
+// This project uses selectable DEMO roles, not a real identity provider. Never
+// listen on a network interface; a future deployment needs genuine auth first.
+const LOOPBACK_HOSTS=new Set(['127.0.0.1','localhost']);
+if(!LOOPBACK_HOSTS.has(HOST))throw new Error('Unsafe demo exposure refused: HOST must be 127.0.0.1 or localhost. Implement real authentication before network deployment.');
+if(!Number.isInteger(PORT)||PORT<1||PORT>65535)throw new Error('Invalid PORT: expected 1–65535');
 const DB_FILE=process.env.DB_FILE||join(ROOT,'data','riverton-demo.sqlite');
 const db=openDatabase(DB_FILE);if(!isSeeded(db))seed(db);
-const PORT=Number(process.env.PORT||4173),HOST=process.env.HOST||'127.0.0.1';
 const sessions=new Map<string,{actor:string,role:'instructor'|'staff'|'viewer',expires:number}>();
 class AppError extends Error {status:number;constructor(status:number,message:string){super(message);this.status=status}}
 const fail=(code:number,message:string):never=>{throw new AppError(code,message)};
@@ -22,11 +27,42 @@ const vendorExists=(id:string)=>!!db.prepare('SELECT 1 FROM vendor_refs WHERE id
 const logCondition=(id:string,condition:string,note:string,actor:string,loanId:number|null=null)=>db.prepare('INSERT INTO condition_events(asset_id,loan_id,condition,notes,actor,recorded_at) VALUES (?,?,?,?,?,?)').run(id,loanId,condition,note,actor,isoNow());
 const openQuarantine=(id:string,reason:string,actor:string)=>{if(!db.prepare('SELECT id FROM quarantines WHERE asset_id=? AND closed_at IS NULL').get(id))db.prepare('INSERT INTO quarantines(asset_id,reason,opened_at,opened_by) VALUES (?,?,?,?)').run(id,reason,isoNow(),actor)};
 const roleAllowed=(r:string,roles:string[])=>{if(!roles.includes(r))fail(403,'Your demo role cannot perform this action')};
+function requestBoundary(req:IncomingMessage){
+ // Reject DNS rebinding and misconfigured reverse proxies even when bound to
+ // loopback. The Host/Origin checks are safeguards, not production auth.
+ const host=req.headers.host;
+ if(typeof host!=='string')fail(403,'Untrusted request host');
+ let authority:URL;
+ try{authority=new URL('http://'+host)}catch{fail(403,'Untrusted request host')}
+ if(!LOOPBACK_HOSTS.has(authority.hostname)||authority.port!==String(PORT)||authority.pathname!=='/'||authority.username||authority.password)fail(403,'Untrusted request host');
+ const origin=req.headers.origin;
+ if(typeof origin==='string'&&origin!==authority.origin)fail(403,'Cross-origin requests are not permitted');
+ if(req.headers['sec-fetch-site']==='cross-site')fail(403,'Cross-site requests are not permitted');
+ if(req.method==='POST'&&req.headers['content-type']?.split(';')[0]?.trim().toLowerCase()!=='application/json')fail(415,'Expected application/json');
+}
+const APP_CSP="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+function setSecurityHeaders(res:ServerResponse){
+ res.setHeader('X-Content-Type-Options','nosniff');
+ res.setHeader('X-Frame-Options','DENY');
+ res.setHeader('Referrer-Policy','no-referrer');
+ res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');
+ res.setHeader('Cross-Origin-Resource-Policy','same-origin');
+ res.setHeader('Content-Security-Policy',APP_CSP);
+ res.setHeader('Cache-Control','no-store');
+}
 function session(req:IncomingMessage){const cookie=(req.headers.cookie||'').match(/(?:^|;\s*)rv_session=([^;]+)/)?.[1];const value=cookie?sessions.get(cookie):undefined;if(value&&value.expires>Date.now())return value;return null}
 function json(res:ServerResponse,data:unknown,status=200){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data))}
 function html(res:ServerResponse,body:string){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(body)}
 function csvResponse(res:ServerResponse,text:string,file:string){res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="${file}"`,'Cache-Control':'no-store'});res.end(text)}
-function readBody(req:IncomingMessage):Promise<any>{return new Promise((resolve,reject)=>{let data='';req.on('data',chunk=>{data+=chunk;if(data.length>300_000){reject(new AppError(413,'Request too large'));req.destroy()}});req.on('end',()=>{try{resolve(data?JSON.parse(data):{})}catch{reject(new AppError(400,'Malformed JSON'))}});req.on('error',reject)})}
+function readBody(req:IncomingMessage):Promise<any>{return new Promise((resolve,reject)=>{
+ const chunks:Buffer[]=[];let bytes=0,oversized=false;
+ req.on('data',(chunk:Buffer)=>{if(oversized)return;bytes+=chunk.byteLength;
+   if(bytes>300_000){oversized=true;chunks.length=0;reject(new AppError(413,'Request too large'));return}
+   chunks.push(chunk);
+ });
+ req.on('end',()=>{if(oversized)return;try{const data=Buffer.concat(chunks).toString('utf8');resolve(data?JSON.parse(data):{})}catch{reject(new AppError(400,'Malformed JSON'))}});
+ req.on('error',reject);
+})}
 function parsePath(req:IncomingMessage){return new URL(req.url||'/',`http://${HOST}:${PORT}`)}
 function asPositiveInt(v:unknown,max=100000){const n=Number(v);if(!Number.isSafeInteger(n)||n<=0||n>max)fail(400,`Expected positive integer up to ${max}`);return n}
 const requiredText=(v:unknown,max=500)=>{const s=safeText(v,max);if(!s)fail(400,'Required text is missing');return s};
@@ -137,10 +173,12 @@ const esc=(s:any)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;',
 function labels(ids:string[],req:IncomingMessage,res:ServerResponse){if(!ids.length||ids.length>24)fail(400,'Select 1–24 assets per print sheet');const assets=ids.map(needAsset);const base=(process.env.PUBLIC_BASE_URL||('http://'+HOST+':'+PORT)).replace(/\/$/,'');const baseUrl=new URL(base);if(!['http:','https:'].includes(baseUrl.protocol)||baseUrl.username||baseUrl.password)fail(500,'Invalid label URL configuration');
  const urls=assets.map(a=>base+'/?asset='+encodeURIComponent(a.id));
  const python=join(ROOT,'src','make_qr.py');const svgs=JSON.parse(execFileSync('python',[python],{input:JSON.stringify(urls),encoding:'utf8',maxBuffer:4_000_000,timeout:10000}));
- html(res,`<!doctype html><html><head><meta charset="utf-8"><title>Asset labels · Riverton demo</title><style>body{font-family:system-ui;margin:24px;color:#182b31}.sheet{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.label{border:1px dashed #8c9a9c;padding:14px;min-height:175px;display:flex;gap:10px;align-items:center;break-inside:avoid}.label svg{width:105px;height:105px}.meta{font-size:12px}.meta strong{display:block;font-size:16px;margin-bottom:6px}.print{padding:10px 18px;background:#153e42;color:white;border:0;border-radius:6px;margin-bottom:20px}@media print{.print,.note{display:none}.label{border:1px solid #aaa}body{margin:0}}</style></head><body><button class="print" onclick="print()">Print labels</button><p class="note">QR encodes a non-sensitive asset URL. Authentication is still required to see asset records.</p><div class="sheet">${assets.map((a,i)=>`<div class="label">${svgs[i]}<div class="meta"><strong>${esc(a.tag)}</strong>${esc(a.category)}<p>${esc(a.make_model)}</p><small>Riverton demo lab</small></div></div>`).join('')}</div></body></html>`);
+ res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'");
+ html(res,`<!doctype html><html><head><meta charset="utf-8"><title>Asset labels · Riverton demo</title><style>body{font-family:system-ui;margin:24px;color:#182b31}.sheet{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.label{border:1px dashed #8c9a9c;padding:14px;min-height:175px;display:flex;gap:10px;align-items:center;break-inside:avoid}.label svg{width:105px;height:105px}.meta{font-size:12px}.meta strong{display:block;font-size:16px;margin-bottom:6px}.print{padding:10px 18px;background:#153e42;color:white;border:0;border-radius:6px;margin-bottom:20px}@media print{.print,.note{display:none}.label{border:1px solid #aaa}body{margin:0}}</style></head><body><p class="note">Use your browser Print command (Ctrl/⌘ + P). QR encodes a non-sensitive asset URL. Authentication is still required to see asset records.</p><div class="sheet">${assets.map((a,i)=>`<div class="label">${svgs[i]}<div class="meta"><strong>${esc(a.tag)}</strong>${esc(a.category)}<p>${esc(a.make_model)}</p><small>Riverton demo lab</small></div></div>`).join('')}</div></body></html>`);
 }
 function serveFile(path:string,res:ServerResponse){const map:{[k:string]:string}={'/':'index.html','/index.html':'index.html','/styles.css':'styles.css','/client.js':'client.js'};const target=map[path];if(!target)fail(404,'Page not found');const filepath=join(ROOT,'web',target);if(!existsSync(filepath))fail(404,'Static asset unavailable');res.writeHead(200,{'Content-Type':extname(target)==='.css'?'text/css; charset=utf-8':extname(target)==='.js'?'application/javascript; charset=utf-8':'text/html; charset=utf-8','X-Content-Type-Options':'nosniff'});res.end(readFileSync(filepath));}
 export async function handle(req:IncomingMessage,res:ServerResponse){try{
+ setSecurityHeaders(res);requestBoundary(req);
  const url=parsePath(req),path=url.pathname,method=req.method||'GET';
  if(!path.startsWith('/api/')){if(method!=='GET')fail(405,'Method not allowed');return serveFile(path,res)}
  if(method==='POST'&&path==='/api/demo/login'){
@@ -174,7 +212,7 @@ export async function handle(req:IncomingMessage,res:ServerResponse){try{
  if(method==='POST'&&path==='/api/requests'){roleAllowed(user.role,['instructor']);return json(res,purchaseDraft(await readBody(req),user.actor),201)}
  if(method==='POST'&&path==='/api/import/preview'){roleAllowed(user.role,['instructor','staff']);const b=await readBody(req);const text=requiredText(b.csv,200000);const rows=parseCsv(text);if(rows.length>300)fail(413,'Import limited to 300 rows');const id=randomUUID();transaction(db,()=>db.prepare('INSERT INTO import_batches(id,lab_id,created_by,created_at,raw_csv) VALUES (?,?,?,?,?)').run(id,'riverton',user.actor,isoNow(),text));return json(res,{batch_id:id,rows:rows.map((r,i)=>validateImport(r,i,id))})}
  if(method==='POST'&&path==='/api/import/commit'){roleAllowed(user.role,['instructor','staff']);const b=await readBody(req),batch=requiredText(b.batch_id,100);const originalBatch=db.prepare('SELECT raw_csv FROM import_batches WHERE id=? AND lab_id=?').get(batch,'riverton') as any;if(!originalBatch)fail(404,'Import batch not found');const originalRows=parseCsv(originalBatch.raw_csv,true);if(!Array.isArray(b.rows)||b.rows.length>300)fail(400,'Provide up to 300 rows');
-   const committed:any[]=[],invalid:any[]=[];for(const row of b.rows){const rowNo=asPositiveInt(row.row_number,10000);const existing=db.prepare('SELECT asset_id FROM import_rows WHERE batch_id=? AND row_number=?').get(batch,rowNo) as any;if(existing){committed.push({row_number:rowNo,asset_id:existing.asset_id,already_accepted:true});continue;}
+   const committed:any[]=[],invalid:any[]=[];for(const row of b.rows){const rowNo=asPositiveInt(row.row_number,10000);if(rowNo<2||rowNo>originalRows.length+1)fail(400,'Row number is outside the previewed import batch');const existing=db.prepare('SELECT asset_id FROM import_rows WHERE batch_id=? AND row_number=?').get(batch,rowNo) as any;if(existing){committed.push({row_number:rowNo,asset_id:existing.asset_id,already_accepted:true});continue;}
      const checked=validateImport(row.values||{},rowNo-2,batch);if(checked.errors.length){invalid.push(checked);continue;}
      try{const asset=transaction(db,()=>createAsset({...checked.values,interval_days:180},user.actor,{batch,row:rowNo,source:originalRows[rowNo-2]}));committed.push({row_number:rowNo,asset_id:asset.id,already_accepted:false})}catch(e:any){invalid.push({...checked,errors:[e.message]})}
    }return json(res,{committed,invalid});

@@ -23,7 +23,7 @@ There is no `npm install` step needed for the supplied precompiled `web/client.j
 python -m pip install -r requirements.txt
 ```
 
-Change the local port by setting `PORT=4300 npm start`. The HTTP server binds to `127.0.0.1` by default. For labels usable from other devices, a trusted administrator must set an accessible `PUBLIC_BASE_URL` after configuring a suitable authentication and network environment. Never put a production or public deployment directly behind the demo login selector.
+Change the local port with `PORT=4300 npm start`. **This build deliberately refuses non-loopback `HOST` bindings** (`0.0.0.0`, LAN IPs and public interfaces) because anyone able to reach the demo role selector could assume instructor privileges. It also validates request Host/Origin, requires JSON for POSTs and disallows cross-site browser mutations. QR codes generated locally are intended for the same local host; cross-device or public QR flows require replacing demo authentication and reworking network access. Do not expose this app through a tunnel, reverse proxy or public hostname.
 
 ## Operator workflow
 
@@ -35,7 +35,7 @@ Change the local port by setting `PORT=4300 npm start`. The HTTP server binds to
 6. **Maintenance:** record the actual service date, notes and optional service reference (including a photo reference), or issue a *new* maintenance-policy version. The date-based next review is calculated from that service date and active interval. No machine-usage data is manufactured.
 7. **Requests:** save a replacement/purchasing draft with quantity, reason, curated vendor reference and optional supplied estimate. Export CSV. There is no vendor integration, authorization-to-spend, or order placement.
 8. **Import:** paste/upload CSV, preview rejected rows, correct them and commit valid rows. Repeating the same batch/row does not duplicate accepted assets. Original parsed source fields and normalized accepted fields are stored separately.
-9. **QR labels:** the library can print a sheet of up to 24 labels at once. QR contains a non-sensitive asset URL; the asset API requires a session before disclosing borrower information. A print sheet does not include borrowers or service notes.
+9. **QR labels:** the library generates a print sheet of up to 24 labels at once (use the browser Print command). QR contains a non-sensitive asset URL; the asset API requires a session before disclosing borrower information. A print sheet does not include borrowers or service notes.
 10. **Audit:** inspect actor-attributed changes. Instructors can use **Reset synthetic demo records** in the sidebar, which resets the one demo lab only. It destroys demo changes, not other organizations' records.
 
 The **Refresh** button is available on each screen; the UI reports the last fetched snapshot time. When another staff member has already issued an item, a stale screen receives an HTTP 409 with the current conflict rather than succeeding.
@@ -75,7 +75,7 @@ docs/                    product brief, pilot, status and test evidence
 - **Policies:** date-only due dates use UTC `YYYY-MM-DD`; exact loan due times use ISO UTC instants, displayed using the browser's named local timezone. Every service event retains the maintenance-plan-version ID and a snapshot of its computed next due date.
 - **Purchasing:** cents are stored as integers, and estimates stay null if not supplied. Vendor references have a catalog reference and last-checked date; these do not imply stock, pricing accuracy, approved procurement or purchasing authority.
 - **Imports:** a 300-row / 200 KB request ceiling, RFC4180-compatible quoting, duplicate tag validation, shared-serial warning (not an automatic merge), source/normalized provenance, per-batch row idempotency.
-- **Data separation:** a single explicitly marked demo lab (`riverton`). The only reset operation reseeds its synthetic tables. Other organizations are not modeled. Production requires tenant-scoped identity, stronger authorization, migrations/backups, rate limits, accessibility testing and security review.
+- **Data separation:** a single explicitly marked demo lab (`riverton`). The only reset operation reseeds its synthetic tables. Other organizations are not modeled. Production requires tenant-scoped identity, stronger authorization, migrations/backups, rate limits, accessibility testing and security review. See `docs/DEPLOYMENT_GATES.md` for the explicit release checklist.
 
 ## Limits and retention
 
