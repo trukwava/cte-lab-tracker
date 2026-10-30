@@ -1,0 +1,5 @@
+tag,category,make_model,serial_ref,home_location_id
+AST-NEW-A1,Hand Tools,Claw hammer,SER-A1,LOC-1
+AST-001,Hand Tools,Duplicated tag,SER-ALREADY,LOC-2
+AST-NEW-A3,Power Tools,Cordless drill,SER-A3,
+AST-NEW-A4,Measuring,Digital caliper,SER-DUP-0006,LOC-3

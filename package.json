@@ -1,0 +1,15 @@
+{
+  "name": "riverton-cte-lab-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline-capable local demo of a CTE lab asset, maintenance and purchasing tracker",
+  "scripts": {
+    "start": "node --experimental-strip-types src/server.ts",
+    "dev": "node --watch --experimental-strip-types src/server.ts",
+    "test": "node --test --experimental-strip-types tests/*.test.mjs",
+    "build:client": "tsc -p tsconfig.json && cp build/client.js web/client.js",
+    "check:client": "tsc --noEmit -p tsconfig.json"
+  },
+  "engines": {"node": ">=22.13"}
+}

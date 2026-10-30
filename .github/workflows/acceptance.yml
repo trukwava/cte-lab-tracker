@@ -1,0 +1,22 @@
+name: Acceptance tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  domain-acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Verify domain invariants
+        run: npm test
+      - name: Check TypeScript client
+        run: |
+          npm install --no-save --ignore-scripts typescript@5.8.3
+          npm run check:client
