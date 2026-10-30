@@ -51,6 +51,10 @@ The first command prints a generated one-time credential; treat it as a secret. 
 
 The **Refresh** button is available on each screen; the UI reports the last fetched snapshot time. When another staff member has already issued an item, a stale screen receives an HTTP 409 with the current conflict rather than succeeding.
 
+## Verified local recovery
+
+Create, verify, and restore a SQLite snapshot with `npm run db -- backup`, `npm run db -- verify`, and `npm run db -- restore`. The restore is **create-only** and revokes old local pilot sessions. Backups contain sensitive local account material and are not encrypted automatically; keep them out of version control. See [Recovery runbook](docs/RECOVERY.md).
+
 ## Tests and verification
 
 ```bash
@@ -76,6 +80,7 @@ web/styles.css           responsive instructor-focused interface
 tests/acceptance.test.mjs automated HTTP + SQLite acceptance tests
 tests/pilot-auth.test.mjs local pilot identity/session checks
 tests/lab-boundary.test.mjs cross-lab isolation and destructive-reset checks
+tests/backup.test.mjs backup/verify/restore and session revocation
 fixtures/                CSV input and correction examples
 docs/                    product brief, pilot, status and test evidence
 ```
