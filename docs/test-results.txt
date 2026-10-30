@@ -116,3 +116,10 @@ ok 16 - maintenance dates reject impossible calendar dates without rollover
 > riverton-cte-lab-tracker@0.1.0 check:client
 > tsc --noEmit -p tsconfig.json
 
+
+2026-10-30 — optional local pilot authentication branch (unmerged at time of recording)
+- npm test: 21 passed, 0 failed (16 prior checks + 5 pilot login/session/roles/revocation/rate-limit checks).
+- npm run check:client: passed.
+- npm run build:client: passed; generated web/client.js updated.
+- Browser visual smoke test attempted using headless Chromium, but the renderer timed out in this environment; login layout and keyboard accessibility are not certified by this check.
+- This does not validate public hosting, tenant isolation, security review, or operations on genuine school data.

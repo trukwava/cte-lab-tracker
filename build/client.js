@@ -3,6 +3,7 @@ const app = document.getElementById('app');
 let currentView = 'today';
 let role = '';
 let actor = '';
+let authMode = 'demo';
 let dashboard = {}, assets = [], loans = [], maintenance = [], requests = [], audit = [], locations = [], borrowers = [], vendors = [];
 let lastLoadedAt = '', stale = false;
 let selectedAsset = null, assetSearch = '', assetStatus = '', assetCategory = '', modalKind = '', importBatch = null, toastTimer = 0, working = false;
@@ -28,7 +29,7 @@ catch {
     throw new Error(d.error || 'Request failed'); return d; }
 async function post(path, body = {}) { return api(path, { method: 'POST', body: JSON.stringify(body) }); }
 async function loadAll() { const [d, a, l, m, r, au, lo, bo, ve] = await Promise.all(['/api/dashboard', '/api/assets', '/api/loans', '/api/maintenance', '/api/requests', '/api/audit', '/api/locations', '/api/borrowers', '/api/vendors'].map(p => api(p))); dashboard = d; lastLoadedAt = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); stale = false; assets = a; loans = l; maintenance = m; requests = r; audit = au; locations = lo; borrowers = bo; vendors = ve; }
-function nav() { return `<aside class="sidebar"><div class="brand"><div class="brand-logo">R<span>•</span></div><div><div class="brand-name">Riverton</div><div class="brand-sub">LAB OPERATIONS</div></div></div><div class="lab-select"><span class="lab-symbol">⌂</span><div><strong>Carpentry lab</strong><small>Technical school · Demo</small></div><span class="chev">⌄</span></div><div class="side-label">WORKSPACE</div><nav aria-label="Workspace navigation">${['today', 'assets', 'loans', 'maintenance', 'requests', 'import', 'audit'].map(v => `<button type="button" class="nav-item ${currentView === v ? 'active' : ''}" data-view="${v}"><span class="nav-icon">${ICONS[v]}</span>${LABELS[v]}${v === 'today' && dashboard.overdueCount ? `<span class="nav-count">${dashboard.overdueCount}</span>` : ''}</button>`).join('')}</nav><div class="side-bottom"><div class="side-hint"><span class="safe-dot"></span> LOCAL DEMO <small>Synthetic records · No live systems</small></div>${isInstructor() ? `<button class="reset-link" data-action="reset-demo">↻ Reset synthetic demo records</button>` : ''}<button class="profile" data-action="logout"><span class="avatar">${esc(actor === 'DEMO-INSTRUCTOR' ? 'IN' : actor === 'DEMO-STAFF' ? 'ST' : 'VW')}</span><span><strong>${esc(role === 'instructor' ? 'Demo Instructor' : role === 'staff' ? 'Demo Staff' : 'Demo Viewer')}</strong><small>Switch demo role</small></span><span>⇥</span></button></div></aside>`; }
+function nav() { return `<aside class="sidebar"><div class="brand"><div class="brand-logo">R<span>•</span></div><div><div class="brand-name">Riverton</div><div class="brand-sub">LAB OPERATIONS</div></div></div><div class="lab-select"><span class="lab-symbol">⌂</span><div><strong>Carpentry lab</strong><small>Technical school · ${authMode === 'demo' ? 'Demo' : 'Local pilot'}</small></div><span class="chev">⌄</span></div><div class="side-label">WORKSPACE</div><nav aria-label="Workspace navigation">${['today', 'assets', 'loans', 'maintenance', 'requests', 'import', 'audit'].map(v => `<button type="button" class="nav-item ${currentView === v ? 'active' : ''}" data-view="${v}"><span class="nav-icon">${ICONS[v]}</span>${LABELS[v]}${v === 'today' && dashboard.overdueCount ? `<span class="nav-count">${dashboard.overdueCount}</span>` : ''}</button>`).join('')}</nav><div class="side-bottom"><div class="side-hint"><span class="safe-dot"></span> ${authMode === 'demo' ? 'LOCAL DEMO' : 'LOCAL PILOT'} <small>Synthetic records · No live systems</small></div>${isInstructor() && authMode === 'demo' ? `<button class="reset-link" data-action="reset-demo">↻ Reset synthetic demo records</button>` : ''}<button class="profile" data-action="logout"><span class="avatar">${esc(authMode === 'demo' ? (actor === 'DEMO-INSTRUCTOR' ? 'IN' : actor === 'DEMO-STAFF' ? 'ST' : 'VW') : actor.slice(0, 2).toUpperCase())}</span><span><strong>${esc(authMode === 'demo' ? (role === 'instructor' ? 'Demo Instructor' : role === 'staff' ? 'Demo Staff' : 'Demo Viewer') : actor + ' · ' + role)}</strong><small>${authMode === 'demo' ? 'Switch demo role' : 'Sign out'}</small></span><span>⇥</span></button></div></aside>`; }
 function topbar(title, desc, actions = '') { return `<div class="header-row"><div><div class="crumb">RIVERTON / CARPENTRY LAB <span>/ ${esc(title.toUpperCase())}</span></div><h1>${esc(title)}</h1><p class="subtitle">${esc(desc)}</p></div><div class="header-actions">${actions}<span class="sync-time" title="This is a snapshot; refresh after other staff make changes">${stale ? 'Snapshot may be stale' : 'Updated ' + lastLoadedAt}</span>${btn('↻ Refresh', 'refresh', 'secondary')}</div></div>`; }
 function btn(txt, action, variant = 'primary', extras = '') { return `<button type="button" class="btn ${variant}" data-action="${action}" ${extras}>${txt}</button>`; }
 function cardTitle(title, note, action = '') { return `<div class="section-heading"><div><h2>${title}</h2><p>${note}</p></div>${action}</div>`; }
@@ -207,9 +208,16 @@ async function submitForm(form) {
         }
     }
 }
-function loginScreen() { app.innerHTML = `<div class="login-shell"><div class="login-side"><div class="login-brand"><div class="brand-logo">R<span>•</span></div><strong>Riverton</strong></div><div class="login-intro"><div class="eyebrow">CARPENTRY LAB · OPERATIONS</div><h1>Every tool<br>accounted for.</h1><p>One practical place to issue tools, record repairs and prepare replacement requests.</p><div class="login-features"><span>✓ Single-loan accountability</span><span>✓ Inspection-first blocking</span><span>✓ Auditable maintenance decisions</span></div></div><div class="login-footer">Fictional school, fictional records. Demonstration only.</div></div><div class="login-main"><div class="login-card"><div class="eyebrow">LOCAL DEMO SIGN-IN</div><h2>Open the lab workspace</h2><p>Choose a fictional role. This simulates permissions locally; it is not a production identity provider.</p><button class="role-choice" data-login="instructor"><span class="role-avatar">IN</span><span><strong>Demo Instructor</strong><small>Full operational workflows and instructor release decisions</small></span><span>→</span></button><button class="role-choice" data-login="staff"><span class="role-avatar">ST</span><span><strong>Demo Staff</strong><small>Asset checkout, return, flags and import</small></span><span>→</span></button><button class="role-choice" data-login="viewer"><span class="role-avatar">VW</span><span><strong>Demo Viewer</strong><small>Read-only equipment and service records</small></span><span>→</span></button><div class="login-footnote">QR scans lead to this sign-in first. No borrower details are available to signed-out visitors.</div></div></div></div><div id="toast" class="toast" role="status"></div>`; }
+function loginScreen() {
+    if (authMode === 'pilot') {
+        app.innerHTML = `<div class="login-shell"><div class="login-side"><div class="login-brand"><div class="brand-logo">R<span>•</span></div><strong>Riverton</strong></div><div class="login-intro"><div class="eyebrow">CARPENTRY LAB · OPERATIONS</div><h1>Every tool<br>accounted for.</h1><p>One practical place to issue tools, record repairs and prepare replacement requests.</p><div class="login-features"><span>✓ Tracked equipment loans</span><span>✓ Inspection-first blocking</span><span>✓ Attributed operational actions</span></div></div><div class="login-footer">Fictional school, fictional records. Local-only pilot authentication experiment.</div></div><div class="login-main"><div class="login-card"><div class="eyebrow">LOCAL PILOT SIGN-IN</div><h2>Sign in to the lab</h2><p>Use credentials issued by your local administrator. This is a single-lab pilot, not a public deployment.</p><form id="pilot-login-form"><label class="field">Username<input name="username" type="text" autocomplete="username" maxlength="31" required autofocus></label><label class="field">Password<input name="password" type="password" autocomplete="current-password" required></label><button class="btn primary" type="submit">Sign in securely</button></form><div class="login-footnote">Accounts are created with the local administration command. The demo role selector and reset are disabled in this mode.</div></div></div></div><div id="toast" class="toast" role="status"></div>`;
+        return;
+    }
+    app.innerHTML = `<div class="login-shell"><div class="login-side"><div class="login-brand"><div class="brand-logo">R<span>•</span></div><strong>Riverton</strong></div><div class="login-intro"><div class="eyebrow">CARPENTRY LAB · OPERATIONS</div><h1>Every tool<br>accounted for.</h1><p>One practical place to issue tools, record repairs and prepare replacement requests.</p><div class="login-features"><span>✓ Single-loan accountability</span><span>✓ Inspection-first blocking</span><span>✓ Auditable maintenance decisions</span></div></div><div class="login-footer">Fictional school, fictional records. Demonstration only.</div></div><div class="login-main"><div class="login-card"><div class="eyebrow">LOCAL DEMO SIGN-IN</div><h2>Open the lab workspace</h2><p>Choose a fictional role. This simulates permissions locally; it is not a production identity provider.</p><button class="role-choice" data-login="instructor"><span class="role-avatar">IN</span><span><strong>Demo Instructor</strong><small>Full operational workflows and instructor release decisions</small></span><span>→</span></button><button class="role-choice" data-login="staff"><span class="role-avatar">ST</span><span><strong>Demo Staff</strong><small>Asset checkout, return, flags and import</small></span><span>→</span></button><button class="role-choice" data-login="viewer"><span class="role-avatar">VW</span><span><strong>Demo Viewer</strong><small>Read-only equipment and service records</small></span><span>→</span></button><div class="login-footnote">QR scans lead to this sign-in first. No borrower details are available to signed-out visitors.</div></div></div></div><div id="toast" class="toast" role="status"></div>`;
+}
 async function boot() { try {
     const s = await api('/api/session');
+    authMode = s.demo ? 'demo' : 'pilot';
     if (!s.authenticated) {
         loginScreen();
         return;
@@ -281,7 +289,7 @@ app.addEventListener('click', async (e) => {
     }
     if (action === 'logout') {
         try {
-            await post('/api/demo/logout');
+            await post(authMode === 'demo' ? '/api/demo/logout' : '/api/auth/logout');
             selectedAsset = null;
             loginScreen();
         }
@@ -347,10 +355,30 @@ app.addEventListener('click', async (e) => {
         return;
     }
 });
-app.addEventListener('submit', async (e) => { const form = e.target.closest('form#action-form'); if (form) {
-    e.preventDefault();
-    await submitForm(form);
-} });
+app.addEventListener('submit', async (e) => {
+    const pilotForm = e.target.closest('form#pilot-login-form');
+    if (pilotForm) {
+        e.preventDefault();
+        const button = pilotForm.querySelector('button[type=submit]');
+        button.disabled = true;
+        try {
+            const fields = new FormData(pilotForm);
+            await post('/api/auth/login', { username: fields.get('username'), password: fields.get('password') });
+            await boot();
+        }
+        catch (err) {
+            notify(err.message, true);
+            pilotForm.querySelector('[name=password]').value = '';
+            button.disabled = false;
+        }
+        return;
+    }
+    const form = e.target.closest('form#action-form');
+    if (form) {
+        e.preventDefault();
+        await submitForm(form);
+    }
+});
 app.addEventListener('change', async (e) => { const el = e.target; if (el.id === 'asset-status') {
     assetStatus = el.value;
     draw();
