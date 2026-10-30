@@ -103,4 +103,4 @@ Not implemented: real identity provider, tenant isolation, student personal-data
 
 ## Reference and provenance
 
-Problem inspiration: user-supplied [Pursuit Lookbook](https://lookbook.pursuit.org/people/filter/uft-ai-ambassadors), describing the administrative burden of classroom workshop equipment. This is an **original implementation** using synthetic data, not an extension of Mang-go or any customer platform. The supplied URL was not used to obtain proprietary artifacts, customer interviews or performance metrics. No adoption, savings, procurement or safety claims are made.
+This is an **original implementation** for managing classroom workshop equipment, using synthetic data rather than customer records. It is not an extension of any existing customer platform and does not incorporate proprietary artifacts or interviews. No adoption, savings, procurement or safety claims are made.
