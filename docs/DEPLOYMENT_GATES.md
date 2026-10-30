@@ -15,7 +15,7 @@ See [local pilot authentication](LOCAL_PILOT_AUTH.md) for the intentionally inco
 ## Gate 2: Storage and operations (blocking)
 
 - Select and migrate to a hosted database with transactional single-active-loan enforcement; retain immutable audit and maintenance-policy history.
-- Write and test migration, backup, restore and retention procedures. Record monitoring, alerts and incident ownership.
+- Expand the new **local SQLite backup/verify/create-only restore procedure** into a reviewed hosted migration, managed backups, encryption, retention policy, routine restore drills, and recovery-time targets. Record monitoring, alerts and incident ownership. See [local recovery](RECOVERY.md).
 - Configure secrets outside source control, trusted origins/hosts, TLS termination, trusted proxy boundaries and safe deployment environments.
 - Keep public fixture demonstrations isolated from any real school data, with explicit non-production notices.
 
