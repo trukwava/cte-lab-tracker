@@ -103,4 +103,4 @@ Not implemented: real identity provider, tenant isolation, student personal-data
 
 ## Reference and provenance
 
-This is an **original implementation** addressing the administrative burden of classroom workshop equipment, using synthetic data. It is not an extension of any customer platform. No proprietary artifacts, customer interviews or performance metrics were used. No adoption, savings, procurement or safety claims are made.
+This is an **original implementation** for managing classroom workshop equipment, using synthetic data rather than customer records. It is not an extension of any existing customer platform and does not incorporate proprietary artifacts or interviews. No adoption, savings, procurement or safety claims are made.
