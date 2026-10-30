@@ -5,10 +5,12 @@ This document names technical exit criteria rather than claiming approval, compl
 
 ## Gate 1: Identity and permissions (blocking)
 
-- Replace selectable demo roles with verified identity from a supported provider, with server-validated sessions and explicit role assignment.
+- For public use, replace selectable demo roles with reviewed identity from a supported provider, with server-validated sessions and explicit role assignment. A **local-only experimental pilot account mode** now verifies password credentials and persists hashed sessions, but it is not a hosting solution.
 - Separate demo mode from real organizations and prevent fixture reset in production.
 - Scope every query and mutation by the authenticated organization and lab; add permission tests for horizontal access, not merely viewer/staff/instructor checks.
 - Protect sign-in, reset, import and state-changing requests from CSRF, session fixation and abuse. Adopt secure cookies, HTTPS-only settings and rate limits for the hosted environment.
+
+See [local pilot authentication](LOCAL_PILOT_AUTH.md) for the intentionally incomplete identity milestone.
 
 ## Gate 2: Storage and operations (blocking)
 

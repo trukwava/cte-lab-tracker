@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { verifyCredentials, createSession, getSession, revokeSession, type Identity } from './auth.ts';
 import { execFileSync } from 'node:child_process';
 import { openDatabase, seed, isSeeded, transaction, audit, type DB } from './db.ts';
 import { CATEGORIES, CONDITIONS, BLOCKED, dateAfter, dateOnly, datePlus, isoNow, isIso, validateDate, safeText, parseCsv, csv } from './domain.ts';
@@ -14,9 +15,13 @@ const PORT=Number(process.env.PORT||4173),HOST=process.env.HOST||'127.0.0.1';
 const LOOPBACK_HOSTS=new Set(['127.0.0.1','localhost']);
 if(!LOOPBACK_HOSTS.has(HOST))throw new Error('Unsafe demo exposure refused: HOST must be 127.0.0.1 or localhost. Implement real authentication before network deployment.');
 if(!Number.isInteger(PORT)||PORT<1||PORT>65535)throw new Error('Invalid PORT: expected 1–65535');
-const DB_FILE=process.env.DB_FILE||join(ROOT,'data','riverton-demo.sqlite');
+const AUTH_MODE=process.env.AUTH_MODE||'demo';
+if(!['demo','pilot'].includes(AUTH_MODE))throw new Error('AUTH_MODE must be demo or pilot');
+const DB_FILE=process.env.DB_FILE||join(ROOT,'data',AUTH_MODE==='pilot'?'riverton-pilot.sqlite':'riverton-demo.sqlite');
 const db=openDatabase(DB_FILE);if(!isSeeded(db))seed(db);
-const sessions=new Map<string,{actor:string,role:'instructor'|'staff'|'viewer',expires:number}>();
+const sessions=new Map<string,Identity>();
+// In-process throttling is appropriate for the loopback-only pilot, not distributed hosting.
+const loginFailures=new Map<string,{count:number,until:number}>();
 class AppError extends Error {status:number;constructor(status:number,message:string){super(message);this.status=status}}
 const fail=(code:number,message:string):never=>{throw new AppError(code,message)};
 const fetchAsset=(id:string)=>db.prepare(`SELECT a.*,l.name home_location,c.name current_location,p.interval_days,p.next_due_date,p.version plan_version,(SELECT group_concat(v.name, ', ') FROM asset_vendor_refs av JOIN vendor_refs v ON v.id=av.vendor_id WHERE av.asset_id=a.id) vendor_names,(SELECT group_concat(av.vendor_id, ',') FROM asset_vendor_refs av WHERE av.asset_id=a.id) vendor_ids,(SELECT borrower_code FROM loans WHERE asset_id=a.id AND returned_at IS NULL) borrower_code,(SELECT due_at FROM loans WHERE asset_id=a.id AND returned_at IS NULL) loan_due_at FROM assets a LEFT JOIN locations l ON a.home_location_id=l.id LEFT JOIN locations c ON a.current_location_id=c.id LEFT JOIN maintenance_plan_versions p ON a.current_plan_id=p.id WHERE a.id=? AND a.lab_id='riverton'`).get(id) as any;
@@ -26,7 +31,7 @@ const borrowerExists=(code:string)=>!!db.prepare('SELECT 1 FROM borrower_refs WH
 const vendorExists=(id:string)=>!!db.prepare('SELECT 1 FROM vendor_refs WHERE id=? AND lab_id=?').get(id,'riverton');
 const logCondition=(id:string,condition:string,note:string,actor:string,loanId:number|null=null)=>db.prepare('INSERT INTO condition_events(asset_id,loan_id,condition,notes,actor,recorded_at) VALUES (?,?,?,?,?,?)').run(id,loanId,condition,note,actor,isoNow());
 const openQuarantine=(id:string,reason:string,actor:string)=>{if(!db.prepare('SELECT id FROM quarantines WHERE asset_id=? AND closed_at IS NULL').get(id))db.prepare('INSERT INTO quarantines(asset_id,reason,opened_at,opened_by) VALUES (?,?,?,?)').run(id,reason,isoNow(),actor)};
-const roleAllowed=(r:string,roles:string[])=>{if(!roles.includes(r))fail(403,'Your demo role cannot perform this action')};
+const roleAllowed=(r:string,roles:string[])=>{if(!roles.includes(r))fail(403,'Your role cannot perform this action')};
 function requestBoundary(req:IncomingMessage){
  // Reject DNS rebinding and misconfigured reverse proxies even when bound to
  // loopback. The Host/Origin checks are safeguards, not production auth.
@@ -50,7 +55,9 @@ function setSecurityHeaders(res:ServerResponse){
  res.setHeader('Content-Security-Policy',APP_CSP);
  res.setHeader('Cache-Control','no-store');
 }
-function session(req:IncomingMessage){const cookie=(req.headers.cookie||'').match(/(?:^|;\s*)rv_session=([^;]+)/)?.[1];const value=cookie?sessions.get(cookie):undefined;if(value&&value.expires>Date.now())return value;return null}
+function cookieToken(req:IncomingMessage){return (req.headers.cookie||'').match(/(?:^|;\s*)rv_session=([^;]+)/)?.[1]||''}
+function session(req:IncomingMessage){const token=cookieToken(req);if(AUTH_MODE==='pilot')return token?getSession(db,token):null;const value=token?sessions.get(token):undefined;if(value&&value.expires>Date.now())return value;return null}
+function setCookie(res:ServerResponse,token:string,seconds:number){res.setHeader('Set-Cookie',`rv_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${seconds}`)}
 function json(res:ServerResponse,data:unknown,status=200){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data))}
 function html(res:ServerResponse,body:string){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(body)}
 function csvResponse(res:ServerResponse,text:string,file:string){res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':`attachment; filename="${file}"`,'Cache-Control':'no-store'});res.end(text)}
@@ -182,12 +189,29 @@ export async function handle(req:IncomingMessage,res:ServerResponse){try{
  const url=parsePath(req),path=url.pathname,method=req.method||'GET';
  if(!path.startsWith('/api/')){if(method!=='GET')fail(405,'Method not allowed');return serveFile(path,res)}
  if(method==='POST'&&path==='/api/demo/login'){
-   const b=await readBody(req),role=b.role;if(!['instructor','staff','viewer'].includes(role))fail(400,'Unknown demo role');const actor=role==='instructor'?'DEMO-INSTRUCTOR':role==='staff'?'DEMO-STAFF':'DEMO-VIEWER';const token=randomUUID();sessions.set(token,{actor,role,expires:Date.now()+86400_000});res.setHeader('Set-Cookie',`rv_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400`);return json(res,{actor,role,demo:true});
+   if(AUTH_MODE!=='demo')fail(404,'Demo sign-in disabled in pilot mode');
+   const b=await readBody(req),role=b.role;if(!['instructor','staff','viewer'].includes(role))fail(400,'Unknown demo role');const actor=role==='instructor'?'DEMO-INSTRUCTOR':role==='staff'?'DEMO-STAFF':'DEMO-VIEWER';const token=randomUUID();sessions.set(token,{actor,role,labId:'riverton',expires:Date.now()+86400_000});setCookie(res,token,86400);return json(res,{actor,role,demo:true});
  }
- const user=session(req);if(method==='GET'&&path==='/api/session')return json(res,{authenticated:!!user,actor:user?.actor||null,role:user?.role||null,demo:true});
- if(!user)fail(401,'Sign in to the demo to view lab records');
- if(method==='POST'&&path==='/api/demo/logout'){const cookie=(req.headers.cookie||'').match(/rv_session=([^;]+)/)?.[1];if(cookie)sessions.delete(cookie);res.setHeader('Set-Cookie','rv_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');return json(res,{ok:true})}
- if(method==='POST'&&path==='/api/demo/reset'){roleAllowed(user.role,['instructor']);seed(db);return json(res,{ok:true,dashboard:today()})}
+ if(method==='POST'&&path==='/api/auth/login'){
+   if(AUTH_MODE!=='pilot')fail(404,'Password sign-in is not configured for this demo');
+   const key=req.socket.remoteAddress||'local';const attempt=loginFailures.get(key);
+   if(attempt&&attempt.until>Date.now()&&attempt.count>=5)fail(429,'Too many attempts. Try again later');
+   const b=await readBody(req),identity=verifyCredentials(db,b.username,b.password);
+   if(!identity){const current=attempt&&attempt.until>Date.now()?attempt.count:0;loginFailures.set(key,{count:current+1,until:Date.now()+60_000});fail(401,'Invalid credentials')}
+   loginFailures.delete(key);const created=createSession(db,identity);setCookie(res,created.token,8*3600);
+   return json(res,{actor:identity.actor,role:identity.role,demo:false});
+ }
+ const user=session(req);if(method==='GET'&&path==='/api/session')return json(res,{authenticated:!!user,actor:user?.actor||null,role:user?.role||null,demo:AUTH_MODE==='demo',lab_id:user?.labId||null});
+ if(!user)fail(401,'Sign in to view lab records');
+ if(user.labId!=='riverton')fail(403,'Lab access denied');
+ if(method==='POST'&&(path==='/api/demo/logout'||path==='/api/auth/logout')){
+   const token=cookieToken(req);if(AUTH_MODE==='pilot')revokeSession(db,token);else sessions.delete(token);
+   setCookie(res,'',0);return json(res,{ok:true});
+ }
+ if(method==='POST'&&path==='/api/demo/reset'){
+   if(AUTH_MODE!=='demo')fail(404,'Pilot records cannot be reset through the API');
+   roleAllowed(user.role,['instructor']);seed(db);return json(res,{ok:true,dashboard:today()});
+ }
  if(method==='GET'&&path==='/api/dashboard')return json(res,today());
  if(method==='GET'&&path==='/api/locations')return json(res,db.prepare("SELECT * FROM locations WHERE lab_id='riverton' ORDER BY id").all());
  if(method==='GET'&&path==='/api/borrowers')return json(res,db.prepare("SELECT * FROM borrower_refs WHERE lab_id='riverton' ORDER BY code").all());
