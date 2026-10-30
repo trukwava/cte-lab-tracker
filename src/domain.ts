@@ -7,10 +7,14 @@ export type AssetStatus = (typeof STATUSES)[number];
 export type Condition = (typeof CONDITIONS)[number];
 export const isoNow = () => new Date().toISOString();
 export function datePlus(days:number, d=new Date()) {const date=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()));date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
-export function dateAfter(base:string, days:number) {if(!/^\d{4}-\d{2}-\d{2}$/.test(base))throw new Error('Expected YYYY-MM-DD date');const d=new Date(base+'T00:00:00.000Z');if(Number.isNaN(d.valueOf()))throw new Error('Invalid date');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)}
+export function dateAfter(base:string, days:number) {if(!validateDate(base))throw new Error('Invalid calendar date (YYYY-MM-DD)');const d=new Date(base+'T00:00:00.000Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)}
 export function dateOnly(d:string) {return d.slice(0,10)}
 export const isIso = (s:unknown) => typeof s==='string' && /^\d{4}-\d{2}-\d{2}T/.test(s) && !Number.isNaN(Date.parse(s));
-export const validateDate = (s:unknown) => typeof s==='string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s+'T00:00:00Z'));
+export const validateDate = (s:unknown) => {
+ if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;
+ const time=Date.parse(s+'T00:00:00Z');
+ return !Number.isNaN(time)&&new Date(time).toISOString().slice(0,10)===s;
+};
 export function csvEscape(value:unknown) {let v=String(value??'');if(/^[\s]*[=+@-]/.test(v))v="'"+v;return /[",\n\r]/.test(v)?'"'+v.replaceAll('"','""')+'"':v;}
 export function csv(rows:Record<string,unknown>[], keys:string[]) {return [keys.join(','),...rows.map(r=>keys.map(k=>csvEscape(r[k])).join(','))].join('\r\n')+'\r\n';}
 /** RFC4180-compatible small-input CSV parser (quotes, escaped quotes, CRLF). */
