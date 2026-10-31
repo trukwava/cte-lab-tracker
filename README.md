@@ -103,4 +103,8 @@ Not implemented: real identity provider, tenant isolation, student personal-data
 
 ## Reference and provenance
 
-This is an **original implementation** for managing classroom workshop equipment, using synthetic data rather than customer records. It is not an extension of any existing customer platform and does not incorporate proprietary artifacts or interviews. No adoption, savings, procurement or safety claims are made.
+Problem inspiration: user-supplied [Pursuit Lookbook](https://lookbook.pursuit.org/people/filter/uft-ai-ambassadors), describing the administrative burden of classroom workshop equipment. This is an **original implementation** using synthetic data, not an extension of Mang-go or any customer platform. The supplied URL was not used to obtain proprietary artifacts, customer interviews or performance metrics. No adoption, savings, procurement or safety claims are made.
+
+## Incremental organization authorization
+
+The localhost-only pilot now requires enabled **organization and lab memberships** for login and session authorization. Organization roles cap lab permissions; revocation applies immediately. Each fictional lab receives a separate default organization. This is not complete multi-tenant hosting; see [organization boundary](docs/ORGANIZATION_BOUNDARY.md).

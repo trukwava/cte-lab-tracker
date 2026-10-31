@@ -37,3 +37,6 @@ Do not use a public tunnel, reverse proxy or network exposure to bypass this gua
 ## Pilot decision
 
 Once Gates 1–3 are evidenced, run a two-week shadow-mode lab trial measuring checkout speed, overdue resolution, missing-tool reconciliation, maintenance follow-through and staff entry burden. Stop for any unauthorized role access, blocked tool issued, duplicate active loan, untraceable release, or broken audit/recovery path.
+
+### Organization membership boundary (partial)
+Organization-scoped account membership checks and immutable default lab ownership are implemented, but application operations remain Riverton-only. Comprehensive per-request multi-org scoping, public TLS, production identity, and PostgreSQL are **not delivered**. See [ORGANIZATION_BOUNDARY.md](ORGANIZATION_BOUNDARY.md).
