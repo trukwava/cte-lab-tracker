@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS import_rows (batch_id TEXT NOT NULL REFERENCES import
 -- Local pilot identities deliberately bound to the single fictional Riverton lab.
 CREATE TABLE IF NOT EXISTS local_accounts (id TEXT PRIMARY KEY,lab_id TEXT NOT NULL REFERENCES labs(id),username TEXT NOT NULL UNIQUE COLLATE NOCASE,role TEXT NOT NULL CHECK(role IN ('instructor','staff','viewer')),salt TEXT NOT NULL,password_hash TEXT NOT NULL,disabled INTEGER NOT NULL DEFAULT 0 CHECK(disabled IN (0,1)),created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS local_sessions (token_hash TEXT PRIMARY KEY,account_id TEXT NOT NULL REFERENCES local_accounts(id) ON DELETE CASCADE,expires_at INTEGER NOT NULL,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS lab_memberships (account_id TEXT NOT NULL REFERENCES local_accounts(id) ON DELETE CASCADE,lab_id TEXT NOT NULL REFERENCES labs(id),role TEXT NOT NULL CHECK(role IN ('instructor','staff','viewer')),enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),granted_at TEXT NOT NULL,PRIMARY KEY(account_id,lab_id));
 CREATE INDEX IF NOT EXISTS local_sessions_expiry ON local_sessions(expires_at);
 
 
@@ -93,6 +94,9 @@ CREATE TRIGGER IF NOT EXISTS vendor_lab_immutable BEFORE UPDATE OF lab_id ON ven
 WHEN NEW.lab_id<>OLD.lab_id BEGIN SELECT RAISE(ABORT,'Vendor lab assignment is immutable'); END;
 
 `);
+ // Backfill legacy pilot memberships without resurrecting disabled or revoked memberships.
+ db.exec(`INSERT OR IGNORE INTO lab_memberships(account_id,lab_id,role,enabled,granted_at)
+ SELECT a.id,a.lab_id,a.role,CASE WHEN a.disabled=0 THEN 1 ELSE 0 END,a.created_at FROM local_accounts a`);
  // Additive schema upgrades preserve existing SQLite demo records.
  for(const [table,col,definition] of [['import_batches','raw_csv',"TEXT NOT NULL DEFAULT ''"],['import_rows','original_json','TEXT'],['import_rows','normalized_json','TEXT']]){
    const cols=db.prepare('PRAGMA table_info('+table+')').all() as any[];
