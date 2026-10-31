@@ -45,3 +45,8 @@
 - Added a recovery runbook and automated restoration test (including backup while a separate writer connection remains open).
 - Local regression result: **25/25 tests passing** with TypeScript client check passing. GitHub CI to be confirmed on the pull request.
 - Not implemented: scheduled/offsite backups, cryptographic encryption at rest, PostgreSQL recovery, recovery-time targets, or restoration to active production systems.
+
+## Organization boundary checkpoint (2026-10-31)
+Added default one-lab-per-organization mapping, organization memberships, dual membership authorization for pilot sessions, effective role ceilings, and adversarial migration/revocation tests. This is local-only, not production multi-tenancy.
+
+The subsequent HTTP authorization test confirms that role downgrades return 403 on instructor-only mutations and revoked organization membership returns 401; 32 local tests pass.

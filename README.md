@@ -103,4 +103,8 @@ Not implemented: real identity provider, tenant isolation, student personal-data
 
 ## Reference and provenance
 
-This is an **original implementation** for managing classroom workshop equipment, using synthetic data rather than customer records. It is not an extension of any existing customer platform and does not incorporate proprietary artifacts or interviews. No adoption, savings, procurement or safety claims are made.
+This is an **original implementation** addressing the administrative burden of classroom workshop equipment, using synthetic data. It is not an extension of any customer platform. No proprietary artifacts, customer interviews or performance metrics were used. No adoption, savings, procurement or safety claims are made.
+
+## Incremental organization authorization
+
+The localhost-only pilot now requires enabled **organization and lab memberships** for login and session authorization. Organization roles cap lab permissions; revocation applies immediately. Each fictional lab receives a separate default organization. This is not complete multi-tenant hosting; see [organization boundary](docs/ORGANIZATION_BOUNDARY.md).

@@ -4,6 +4,7 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from
 import type { DB } from './db.ts';
 export type Role='instructor'|'staff'|'viewer';
 export type Identity={actor:string,role:Role,labId:'riverton',expires:number};
+const effectiveRole=(org:Role,lab:Role):Role=>org==='viewer'||lab==='viewer'?'viewer':org==='staff'||lab==='staff'?'staff':'instructor';
 const PASSWORD_BYTES=64;
 const DUMMY_SALT='f2b9923c3dcd9cf2ee63a447da5b94b0';
 const DUMMY_HASH=scryptSync('invalid-login-dummy',Buffer.from(DUMMY_SALT,'hex'),PASSWORD_BYTES);
@@ -19,15 +20,19 @@ export function provision(db:DB,usernameRaw:string,role:Role,password:string){
  if(!db.prepare('SELECT id FROM labs WHERE id=?').get('riverton'))throw Error('Initialize the fictional lab before creating accounts');
  const salt=randomBytes(16).toString('hex');const hash=scryptSync(password,Buffer.from(salt,'hex'),PASSWORD_BYTES).toString('hex');
  const existing=db.prepare('SELECT id FROM local_accounts WHERE username=?').get(username) as any;
+ const org=db.prepare('SELECT organization_id FROM organization_labs WHERE lab_id=?').get('riverton') as {organization_id:string}|undefined;
+ if(!org)throw Error('Lab has no organization assignment');
  if(existing){
   db.prepare('UPDATE local_accounts SET role=?,salt=?,password_hash=?,disabled=0 WHERE id=?').run(role,salt,hash,existing.id);
   db.prepare(`INSERT INTO lab_memberships(account_id,lab_id,role,enabled,granted_at) VALUES (?,?,?,?,?) ON CONFLICT(account_id,lab_id) DO UPDATE SET role=excluded.role,enabled=1`).run(existing.id,'riverton',role,1,new Date().toISOString());
+  db.prepare(`INSERT INTO organization_memberships(account_id,organization_id,role,enabled,granted_at) VALUES (?,?,?,?,?) ON CONFLICT(account_id,organization_id) DO UPDATE SET role=excluded.role,enabled=1`).run(existing.id,org.organization_id,role,1,new Date().toISOString());
   db.prepare('DELETE FROM local_sessions WHERE account_id=?').run(existing.id);
   return {username,role,rotated:true};
  }
  const accountId=randomUUID();const now=new Date().toISOString();
  db.prepare('INSERT INTO local_accounts(id,lab_id,username,role,salt,password_hash,created_at) VALUES (?,?,?,?,?,?,?)').run(accountId,'riverton',username,role,salt,hash,now);
  db.prepare('INSERT INTO lab_memberships(account_id,lab_id,role,enabled,granted_at) VALUES (?,?,?,?,?)').run(accountId,'riverton',role,1,now);
+ db.prepare('INSERT INTO organization_memberships(account_id,organization_id,role,enabled,granted_at) VALUES (?,?,?,?,?)').run(accountId,org.organization_id,role,1,now);
  return {username,role,rotated:false};
 }
 export function disableAccount(db:DB,usernameRaw:string){
@@ -35,18 +40,19 @@ export function disableAccount(db:DB,usernameRaw:string){
  if(!found)throw Error('Account not found');
  db.prepare('UPDATE local_accounts SET disabled=1 WHERE id=?').run(found.id);
  db.prepare('UPDATE lab_memberships SET enabled=0 WHERE account_id=?').run(found.id);
+ db.prepare('UPDATE organization_memberships SET enabled=0 WHERE account_id=?').run(found.id);
  db.prepare('DELETE FROM local_sessions WHERE account_id=?').run(found.id);
  return {username,disabled:true};
 }
 export function verifyCredentials(db:DB,usernameRaw:unknown,passwordRaw:unknown){
  const username=usernameOf(usernameRaw);const password=typeof passwordRaw==='string'?passwordRaw:'';
  // Equivalent scrypt cost for unknown users avoids a cheap account-enumeration oracle.
- const account=validUsername(username)?db.prepare(`SELECT a.*,m.role membership_role,m.enabled membership_enabled FROM local_accounts a LEFT JOIN lab_memberships m ON m.account_id=a.id AND m.lab_id=a.lab_id WHERE a.username=?`).get(username) as any:null;
+ const account=validUsername(username)?db.prepare(`SELECT a.*,m.role membership_role,m.enabled membership_enabled,om.role org_role,om.enabled org_enabled FROM local_accounts a LEFT JOIN lab_memberships m ON m.account_id=a.id AND m.lab_id=a.lab_id LEFT JOIN organization_labs ol ON ol.lab_id=a.lab_id LEFT JOIN organization_memberships om ON om.account_id=a.id AND om.organization_id=ol.organization_id WHERE a.username=?`).get(username) as any:null;
  const salt=account?Buffer.from(account.salt,'hex'):Buffer.from(DUMMY_SALT,'hex');
  const reference=account?Buffer.from(account.password_hash,'hex'):DUMMY_HASH;
  const supplied=scryptSync(password.slice(0,200),salt,PASSWORD_BYTES);
- if(!account||account.disabled||account.membership_enabled!==1||password.length>200||!timingSafeEqual(reference,supplied))return null;
- return {accountId:account.id,actor:account.username,role:account.membership_role as Role,labId:'riverton' as const};
+ if(!account||account.disabled||account.membership_enabled!==1||account.org_enabled!==1||password.length>200||!timingSafeEqual(reference,supplied))return null;
+ return {accountId:account.id,actor:account.username,role:effectiveRole(account.org_role as Role,account.membership_role as Role),labId:'riverton' as const};
 }
 export function createSession(db:DB,user:{accountId:string,actor:string,role:Role,labId:'riverton'}){
  const token=randomBytes(32).toString('base64url'),expires=Date.now()+8*3600_000;
@@ -56,8 +62,8 @@ export function createSession(db:DB,user:{accountId:string,actor:string,role:Rol
 }
 export function getSession(db:DB,token:string):Identity|null{
  if(!/^[A-Za-z0-9_-]{43}$/.test(token))return null;
- const record=db.prepare(`SELECT a.username actor,m.role,a.lab_id labId,s.expires_at expires FROM local_sessions s JOIN local_accounts a ON a.id=s.account_id JOIN lab_memberships m ON m.account_id=a.id AND m.lab_id=a.lab_id AND m.enabled=1 WHERE s.token_hash=? AND s.expires_at>? AND a.disabled=0`).get(tokenDigest(token),Date.now()) as any;
+ const record=db.prepare(`SELECT a.username actor,m.role lab_role,om.role org_role,a.lab_id labId,s.expires_at expires FROM local_sessions s JOIN local_accounts a ON a.id=s.account_id JOIN lab_memberships m ON m.account_id=a.id AND m.lab_id=a.lab_id AND m.enabled=1 JOIN organization_labs ol ON ol.lab_id=a.lab_id JOIN organization_memberships om ON om.account_id=a.id AND om.organization_id=ol.organization_id AND om.enabled=1 WHERE s.token_hash=? AND s.expires_at>? AND a.disabled=0`).get(tokenDigest(token),Date.now()) as any;
  if(!record||record.labId!=='riverton')return null;
- return {actor:record.actor,role:record.role,labId:'riverton',expires:record.expires};
+ return {actor:record.actor,role:effectiveRole(record.org_role as Role,record.lab_role as Role),labId:'riverton',expires:record.expires};
 }
 export function revokeSession(db:DB,token:string){if(token)db.prepare('DELETE FROM local_sessions WHERE token_hash=?').run(tokenDigest(token))}
