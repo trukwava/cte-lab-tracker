@@ -16,4 +16,4 @@ Future work must introduce independently audited per-request organization and la
 
 ## Verify
 
-Run `npm test` and `npm run check:client` on Node.js 22.16+. See `tests/organization-boundary.test.mjs` for the four focused scenarios.
+Run `npm test` and `npm run check:client` on Node.js 22.16+. See `tests/organization-boundary.test.mjs` for the four DB-level scenarios and `tests/organization-http.test.mjs` for a live HTTP role downgrade/revocation scenario.

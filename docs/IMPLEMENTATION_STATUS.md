@@ -48,3 +48,5 @@
 
 ## Organization boundary checkpoint (2026-10-31)
 Added default one-lab-per-organization mapping, organization memberships, dual membership authorization for pilot sessions, effective role ceilings, and adversarial migration/revocation tests. This is local-only, not production multi-tenancy.
+
+The subsequent HTTP authorization test confirms that role downgrades return 403 on instructor-only mutations and revoked organization membership returns 401; 32 local tests pass.
