@@ -50,3 +50,13 @@
 Added default one-lab-per-organization mapping, organization memberships, dual membership authorization for pilot sessions, effective role ceilings, and adversarial migration/revocation tests. This is local-only, not production multi-tenancy.
 
 The subsequent HTTP authorization test confirms that role downgrades return 403 on instructor-only mutations and revoked organization membership returns 401; 32 local tests pass.
+
+
+## November 2, 2026 — authenticated lab-scoped HTTP boundary
+
+- Replaced `riverton` operational predicates with the authenticated session's home lab ID for asset/loan/service/purchasing/audit lists, action helpers, previews, CSV exports, and QR print sheets; scope is not accepted from client input.
+- Resolved pilot home lab and organization from the database and its enabled memberships on every authenticated request. Demo role selection stays Riverton-only and remains localhost-restricted.
+- Made audit-event attribution explicitly lab-scoped and added SQLite triggers for return-location/asset, condition-event/loan and approval/asset consistency.
+- Retained prior membership test cases. Added two-organization HTTP and direct SQLite isolation tests, including cross-lab import-batch refusal, purchase-reference rejection, damage/inspection flow, and live organization-membership revocation.
+- **Local results:** `npm test`: **34 passed, 0 failed**; `npm run check:client`: passed. This does not assert public readiness or a completed external security review. GitHub CI must be verified separately on the PR.
+- Remaining blocking work: public TLS and real identity, org/lab administration, shared PostgreSQL and tenant identifier migration, end-to-end browser/security review, hosted backup/restore and incident response.
