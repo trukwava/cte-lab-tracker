@@ -7,7 +7,7 @@ This document names technical exit criteria rather than claiming approval, compl
 
 - For public use, replace selectable demo roles with reviewed identity from a supported provider, with server-validated sessions and explicit role assignment. A **local-only experimental pilot account mode** now verifies password credentials and persists hashed sessions, but it is not a hosting solution.
 - Separate demo mode from real organizations and prevent fixture reset in production.
-- Complete dynamic organization/lab scoping for every query and mutation based on the authenticated principal, not a hardcoded lab. New local cross-lab database triggers, response filters, and negative tests provide **defense in depth for the single Riverton lab**, but they do not enable multi-tenant service. Add fully separate organization principals and cross-tenant tests before hosting.
+- An authenticated laboratory-scoped HTTP implementation with two fictional organization principals and negative tests now covers operational routes, audit, imports, QR labels and exports. **Still blocking**: audited tenant-key coverage across all relational tables, tenant-aware onboarding and account administration, independent per-tenant identifier namespaces, and hosted-DB isolation/security review.
 - Protect sign-in, reset, import and state-changing requests from CSRF, session fixation and abuse. Adopt secure cookies, HTTPS-only settings and rate limits for the hosted environment.
 
 See [local pilot authentication](LOCAL_PILOT_AUTH.md) for the intentionally incomplete identity milestone.
@@ -39,4 +39,4 @@ Do not use a public tunnel, reverse proxy or network exposure to bypass this gua
 Once Gates 1–3 are evidenced, run a two-week shadow-mode lab trial measuring checkout speed, overdue resolution, missing-tool reconciliation, maintenance follow-through and staff entry burden. Stop for any unauthorized role access, blocked tool issued, duplicate active loan, untraceable release, or broken audit/recovery path.
 
 ### Organization membership boundary (partial)
-Organization-scoped account membership checks and immutable default lab ownership are implemented, but application operations remain Riverton-only. Comprehensive per-request multi-org scoping, public TLS, production identity, and PostgreSQL are **not delivered**. See [ORGANIZATION_BOUNDARY.md](ORGANIZATION_BOUNDARY.md).
+Organization/lab membership checks and lab-scoped HTTP operations now work with two synthetic organization principals in tests. Public TLS, production identity, hosted PostgreSQL, tenant-aware onboarding, full schema tenancy audit and production deployment are **not delivered**. See [TENANT_SCOPED_HTTP.md](TENANT_SCOPED_HTTP.md).
