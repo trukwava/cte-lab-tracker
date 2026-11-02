@@ -63,6 +63,29 @@ BEGIN SELECT RAISE(ABORT,'Cross-lab borrower loan'); END;
 CREATE TRIGGER IF NOT EXISTS loan_borrower_lab_update BEFORE UPDATE OF asset_id,borrower_code ON loans
 WHEN NOT EXISTS(SELECT 1 FROM assets a JOIN borrower_refs b ON a.lab_id=b.lab_id WHERE a.id=NEW.asset_id AND b.code=NEW.borrower_code)
 BEGIN SELECT RAISE(ABORT,'Cross-lab borrower loan'); END;
+-- Defense in depth: completed loans and observations cannot point across laboratory boundaries.
+CREATE TRIGGER IF NOT EXISTS loan_return_lab_insert BEFORE INSERT ON loans
+WHEN NEW.return_location_id IS NOT NULL AND NOT EXISTS (
+ SELECT 1 FROM assets a JOIN locations l ON a.lab_id=l.lab_id
+ WHERE a.id=NEW.asset_id AND l.id=NEW.return_location_id)
+BEGIN SELECT RAISE(ABORT,'Cross-lab loan return location'); END;
+CREATE TRIGGER IF NOT EXISTS loan_return_lab_update BEFORE UPDATE OF asset_id,return_location_id ON loans
+WHEN NEW.return_location_id IS NOT NULL AND NOT EXISTS (
+ SELECT 1 FROM assets a JOIN locations l ON a.lab_id=l.lab_id
+ WHERE a.id=NEW.asset_id AND l.id=NEW.return_location_id)
+BEGIN SELECT RAISE(ABORT,'Cross-lab loan return location'); END;
+CREATE TRIGGER IF NOT EXISTS condition_loan_asset_insert BEFORE INSERT ON condition_events
+WHEN NEW.loan_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM loans WHERE id=NEW.loan_id AND asset_id=NEW.asset_id)
+BEGIN SELECT RAISE(ABORT,'Condition observation belongs to another asset loan'); END;
+CREATE TRIGGER IF NOT EXISTS condition_loan_asset_update BEFORE UPDATE OF asset_id,loan_id ON condition_events
+WHEN NEW.loan_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM loans WHERE id=NEW.loan_id AND asset_id=NEW.asset_id)
+BEGIN SELECT RAISE(ABORT,'Condition observation belongs to another asset loan'); END;
+CREATE TRIGGER IF NOT EXISTS approval_asset_lab_insert BEFORE INSERT ON approvals
+WHEN NEW.asset_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM assets WHERE id=NEW.asset_id AND lab_id=NEW.lab_id)
+BEGIN SELECT RAISE(ABORT,'Cross-lab approval reference'); END;
+CREATE TRIGGER IF NOT EXISTS approval_asset_lab_update BEFORE UPDATE OF lab_id,asset_id ON approvals
+WHEN NEW.asset_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM assets WHERE id=NEW.asset_id AND lab_id=NEW.lab_id)
+BEGIN SELECT RAISE(ABORT,'Cross-lab approval reference'); END;
 CREATE TRIGGER IF NOT EXISTS vendor_asset_lab_insert BEFORE INSERT ON asset_vendor_refs
 WHEN NOT EXISTS(SELECT 1 FROM assets a JOIN vendor_refs v ON a.lab_id=v.lab_id WHERE a.id=NEW.asset_id AND v.id=NEW.vendor_id)
 BEGIN SELECT RAISE(ABORT,'Cross-lab vendor association'); END;
@@ -125,7 +148,7 @@ WHEN NEW.lab_id<>OLD.lab_id BEGIN SELECT RAISE(ABORT,'Vendor lab assignment is i
  }
 }
 export function transaction<T>(db:DB,fn:()=>T):T{db.exec('BEGIN IMMEDIATE');try{const result=fn();db.exec('COMMIT');return result;}catch(e){db.exec('ROLLBACK');throw e;}}
-export function audit(db:DB,entity:string,id:string,action:string,actor:string,details:unknown={}){db.prepare('INSERT INTO audit_events(lab_id,entity,entity_id,action,actor,details_json,created_at) VALUES (?,?,?,?,?,?,?)').run('riverton',entity,id,action,actor,JSON.stringify(details),isoNow())}
+export function audit(db:DB,labId:string,entity:string,id:string,action:string,actor:string,details:unknown={}){db.prepare('INSERT INTO audit_events(lab_id,entity,entity_id,action,actor,details_json,created_at) VALUES (?,?,?,?,?,?,?)').run(labId,entity,id,action,actor,JSON.stringify(details),isoNow())}
 export function isSeeded(db:DB){return Number(db.prepare("SELECT COUNT(*) n FROM assets WHERE lab_id='riverton'").get().n)>0}
 export function seed(db:DB) {transaction(db,()=>{
   // Demo resets must never wipe records from another lab in a shared DB.
@@ -162,5 +185,5 @@ export function seed(db:DB) {transaction(db,()=>{
   }
   for(let i=31;i<=33;i++){const id='AST-'+String(i).padStart(3,'0');db.prepare('INSERT INTO quarantines(asset_id,reason,opened_at,opened_by) VALUES (?,?,?,?)').run(id,i===32?'Reported defect':'Inspection required',isoNow(),'DEMO-INSTRUCTOR');}
   db.prepare('INSERT INTO condition_events(asset_id,condition,notes,actor,recorded_at) VALUES (?,?,?,?,?)').run('AST-032','damaged','Damaged return observed during previous lab session','DEMO-INSTRUCTOR',isoNow());
-  audit(db,'lab','riverton','demo_seed','SYSTEM',{assets:60,activeLoans:12,overdue:4,serviceEvents:6,quarantined:3});
+  audit(db,'riverton','lab','riverton','demo_seed','SYSTEM',{assets:60,activeLoans:12,overdue:4,serviceEvents:6,quarantined:3});
 })}
