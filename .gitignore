@@ -5,3 +5,6 @@ data/*.sqlite-shm
 data/*.sqlite-wal
 *.log
 .DS_Store
+# Operational snapshot exports are private and must not be committed.
+migration-exports/
+*.ndjson
