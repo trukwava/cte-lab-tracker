@@ -103,6 +103,7 @@ Not implemented: real identity provider, tenant isolation, student personal-data
 
 ## Reference and provenance
 
+This is an **original implementation** for tracking classroom workshop equipment using synthetic data, not an extension of any existing customer platform. It does not incorporate proprietary artifacts, customer interviews, or performance metrics. No adoption, savings, procurement, or safety claims are made.
 
 ## Incremental organization authorization
 
