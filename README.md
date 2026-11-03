@@ -111,3 +111,14 @@ The localhost-only pilot now requires enabled **organization and lab memberships
 ## Authenticated lab-scoped operations (November 2, 2026)
 
 The local pilot now derives each request's organization and laboratory from enabled account memberships. Operational reads, writes, imports, QR labels, audit records, and CSV exports are restricted to that session's lab. A two-organization synthetic integration test verifies that records cannot cross this boundary. **This does not enable production hosting, public user onboarding, organization switching, or per-tenant global identifier namespaces.** Read [authenticated laboratory scoping](docs/TENANT_SCOPED_HTTP.md) and the [deployment gates](docs/DEPLOYMENT_GATES.md).
+
+## Offline PostgreSQL migration preparation (not a hosted backend)
+
+The repository includes a **proposed PostgreSQL operational schema** and a create-only, verified SQLite-to-NDJSON export for 19 operational tables. It derives lab IDs for dependent records, preserves maintenance/audit/import history and omits local passwords, session tokens and membership credentials. The live server remains SQLite-only and localhost-only. **No PostgreSQL adapter, database import, hosted service or production security approval is implied.**
+
+```bash
+npm run pg:migrate -- export ./data/riverton-demo.sqlite /private/path/cte-operational-snapshot
+npm run pg:migrate -- verify /private/path/cte-operational-snapshot
+```
+
+Exports may contain sensitive raw imports and audit notes and must never be committed publicly. See [PostgreSQL migration preparation](docs/POSTGRESQL_MIGRATION.md) for the verified scope, integrity limits and future tenant-safe loader requirements.
