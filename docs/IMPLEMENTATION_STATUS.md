@@ -60,3 +60,10 @@ The subsequent HTTP authorization test confirms that role downgrades return 403 
 - Retained prior membership test cases. Added two-organization HTTP and direct SQLite isolation tests, including cross-lab import-batch refusal, purchase-reference rejection, damage/inspection flow, and live organization-membership revocation.
 - **Local results:** `npm test`: **34 passed, 0 failed**; `npm run check:client`: passed. This does not assert public readiness or a completed external security review. GitHub CI must be verified separately on the PR.
 - Remaining blocking work: public TLS and real identity, org/lab administration, shared PostgreSQL and tenant identifier migration, end-to-end browser/security review, hosted backup/restore and incident response.
+
+## November 2, 2026 — PostgreSQL migration preparation
+
+- Added candidate PostgreSQL DDL for 19 operational tables with composite laboratory foreign keys, deferred maintenance-plan link, active-loan uniqueness and quarantine uniqueness.
+- Added a consistent, create-only SQLite snapshot export with NDJSON tables, SHA-256/count manifest, derivation/validation of dependent lab IDs, and explicit exclusion of local account passwords and sessions.
+- Added verification and adversarial tests covering a second organization, corrupted cross-lab reference, tampering, provenance, source immutability and refusal to create exports inside the source repository.
+- **Local checks**: `npm test` **40 passed, 0 failed** (34 previously existing + six migration tests); `npm run check:client` passed. PostgreSQL DDL was not executed against an actual Postgres engine, and no runtime adapter or cloud deployment is included. GitHub CI must be checked separately after publication.

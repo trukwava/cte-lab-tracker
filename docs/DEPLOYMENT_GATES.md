@@ -40,3 +40,7 @@ Once Gates 1–3 are evidenced, run a two-week shadow-mode lab trial measuring c
 
 ### Organization membership boundary (partial)
 Organization/lab membership checks and lab-scoped HTTP operations now work with two synthetic organization principals in tests. Public TLS, production identity, hosted PostgreSQL, tenant-aware onboarding, full schema tenancy audit and production deployment are **not delivered**. See [TENANT_SCOPED_HTTP.md](TENANT_SCOPED_HTTP.md).
+
+## PostgreSQL migration preparation checkpoint (2026-11-02)
+
+A candidate PostgreSQL schema and a locally tested, create-only, tenant-aware SQLite snapshot/NDJSON export now exist. The export excludes local authentication materials, verifies relationships and checksums, and is not connected to PostgreSQL. This **does not satisfy Gate 2**: a tested PostgreSQL adapter, actual Postgres-engine schema/transaction tests, an approved data importer, RLS/tenant authorization, managed backups and public TLS remain blocking. See [POSTGRESQL_MIGRATION.md](POSTGRESQL_MIGRATION.md).
